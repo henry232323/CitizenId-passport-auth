@@ -60,6 +60,58 @@ export const AvatarClaimKeys = {
 } as const;
 
 /**
+ * Array of all avatar claim keys for easy iteration
+ */
+export const ALL_AVATAR_CLAIM_KEYS = Object.values(AvatarClaimKeys);
+
+/**
+ * Prefix for custom user claims
+ */
+export const CUSTOM_CLAIM_PREFIX = 'urn:user:';
+
+/**
+ * Suffix for avatar URL claims
+ */
+export const AVATAR_URL_SUFFIX = ':avatar:url';
+
+/**
+ * System-wide roles that can be assigned to any user
+ */
+export const Roles = {
+  // User Account Status
+  STATUS_VERIFIED: 'CitizenId/Status/Verified',
+  STATUS_BANNED: 'CitizenId/Status/Banned',
+  
+  // Account Types
+  ACCOUNT_TYPE_ORGANIZATION: 'CitizenId/AccountType/Organization',
+  ACCOUNT_TYPE_CITIZEN: 'CitizenId/AccountType/Citizen',
+  
+  // Privileged Roles
+  ACCOUNT_ROLE_PARTNER: 'CitizenId/AccountRole/Partner',
+  ACCOUNT_ROLE_INTEGRATOR: 'CitizenId/AccountRole/Integrator',
+  
+  // Internal Roles (reserved for Citizen iD staff - should not be used in applications)
+  INTERNAL_SYSTEM: 'CitizenId/Internal/InternalSystem',
+  INTERNAL_SUPER_ADMIN: 'CitizenId/Internal/SuperAdmin',
+  INTERNAL_ADMIN: 'CitizenId/Internal/Admin',
+  INTERNAL_MODERATOR: 'CitizenId/Internal/Moderator',
+} as const;
+
+/**
+ * Type for role values
+ */
+export type Role = typeof Roles[keyof typeof Roles];
+
+/**
+ * Legacy role format (for backward compatibility)
+ * These are the old format roles that may still appear in tokens
+ */
+export const LegacyRoles = {
+  INTEGRATOR: 'CitizenId.Integrator',
+  CITIZEN: 'CitizenId.AccountType.Citizen',
+} as const;
+
+/**
  * Endpoint URLs for Citizen iD OAuth2/OIDC
  */
 export const Endpoints = {

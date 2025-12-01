@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import session from 'express-session';
-import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes, Endpoints, getEndpoints } from 'passport-citizenid';
+import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes, Endpoints, getEndpoints, PassportDoneCallback } from 'passport-citizenid';
 import dotenv from 'dotenv';
 
 // Extend Express Request to include CitizenIDProfile
@@ -45,7 +45,7 @@ passport.use(new CitizenIDStrategy({
     // Example with custom profile scopes:
     // scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS, Scopes.DISCORD_PROFILE, Scopes.RSI_PROFILE]
   },
-  function verify(accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any) => void) {
+  function verify(accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<CitizenIDProfile>) {
     // In this example, the user's Citizen iD profile is returned to
     // represent the logged-in user. In a typical application, you would want
     // to associate the Citizen iD account with a user record in your database,
@@ -61,10 +61,14 @@ passport.use(new CitizenIDStrategy({
     }
     
     // Store tokens with the user profile for later use
-    (profile as any).accessToken = accessToken;
-    (profile as any).refreshToken = refreshToken;
+    // Extend profile with tokens for this example (in production, store tokens separately)
+    const userWithTokens = {
+      ...profile,
+      accessToken,
+      refreshToken
+    };
     
-    return done(null, profile);
+    return done(null, userWithTokens);
   }
 ));
 
@@ -79,11 +83,11 @@ passport.use(new CitizenIDStrategy({
  * However, since this example does not have a database, the complete profile is
  * serialized and deserialized.
  */
-passport.serializeUser((user: any, done) => {
+passport.serializeUser((user: CitizenIDProfile, done) => {
   done(null, user);
 });
 
-passport.deserializeUser((user: any, done) => {
+passport.deserializeUser((user: CitizenIDProfile, done) => {
   done(null, user);
 });
 

@@ -18,7 +18,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import session from 'express-session';
 import passport from 'passport';
-import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes } from 'passport-citizenid';
+import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes, PassportDoneCallback } from 'passport-citizenid';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -58,7 +58,7 @@ passport.use(new CitizenIDStrategy({
     callbackURL: CALLBACK_URL,
     scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS]
   },
-  function(accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any) => void) {
+  function(accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<CitizenIDProfile>) {
     // In a real application, you would:
     // 1. Check if user exists in your database
     // 2. Create or update user record
@@ -82,13 +82,13 @@ passport.use(new CitizenIDStrategy({
 ));
 
 // Serialize user for session
-passport.serializeUser((user: any, done) => {
+passport.serializeUser((user: CitizenIDProfile, done) => {
   // In production, you'd typically serialize just the user ID
   done(null, user);
 });
 
 // Deserialize user from session
-passport.deserializeUser((user: any, done) => {
+passport.deserializeUser((user: CitizenIDProfile, done) => {
   // In production, you'd fetch the user from your database
   done(null, user);
 });

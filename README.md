@@ -17,13 +17,13 @@ npm install passport-citizenid
 The Citizen iD authentication strategy authenticates users using a Citizen iD account and OAuth 2.0 tokens with OpenID Connect. The strategy requires a `verify` callback, which accepts these credentials and calls `done` providing a user, as well as `options` specifying a client ID, client secret, and callback URL.
 
 ```javascript
-const CitizenIDStrategy = require('passport-citizenid').Strategy;
+const { Strategy: CitizenIDStrategy, Scopes } = require('passport-citizenid');
 
 passport.use(new CitizenIDStrategy({
     clientID: CITIZENID_CLIENT_ID,
     clientSecret: CITIZENID_CLIENT_SECRET, // Optional for public clients with PKCE
     callbackURL: "http://localhost:3000/auth/citizenid/callback",
-    scope: ['openid', 'profile', 'email', 'roles']
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES]
   },
   function(accessToken, refreshToken, profile, done) {
     User.findOrCreate({ citizenId: profile.id }, function (err, user) {
@@ -66,14 +66,14 @@ To use this strategy, you'll need to register an application with Citizen iD and
 
 - **clientSecret**: Your Citizen iD application's Client Secret (optional for public clients using PKCE)
 - **scope**: Array of permission scopes to request
-  - Default: `['openid', 'profile', 'email']`
-  - Available scopes: `openid`, `profile`, `email`, `roles`, `offline_access`
+  - Default: `[Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL]`
+  - Available scopes: Use `Scopes` constants (e.g., `Scopes.OPENID`, `Scopes.PROFILE`, `Scopes.EMAIL`, `Scopes.ROLES`, `Scopes.OFFLINE_ACCESS`, `Scopes.DISCORD_PROFILE`, etc.)
 - **authorizationURL**: Authorization endpoint URL
-  - Default: `'https://citizenid.space/connect/authorize'`
+  - Default: `Endpoints.PRODUCTION.AUTHORIZATION` (or use `Endpoints.DEVELOPMENT.AUTHORIZATION` for dev)
 - **tokenURL**: Token endpoint URL
-  - Default: `'https://citizenid.space/connect/token'`
+  - Default: `Endpoints.PRODUCTION.TOKEN` (or use `Endpoints.DEVELOPMENT.TOKEN` for dev)
 - **userInfoURL**: UserInfo endpoint URL
-  - Default: `'https://citizenid.space/connect/userinfo'`
+  - Default: `Endpoints.PRODUCTION.USERINFO` (or use `Endpoints.DEVELOPMENT.USERINFO` for dev)
 - **pkce**: Enable PKCE (Proof Key for Code Exchange)
   - Default: `true` (recommended for security)
 - **state**: Enable state parameter for CSRF protection
@@ -88,7 +88,7 @@ To use this strategy, you'll need to register an application with Citizen iD and
 ```javascript
 const express = require('express');
 const passport = require('passport');
-const CitizenIDStrategy = require('passport-citizenid').Strategy;
+const { Strategy: CitizenIDStrategy, Scopes } = require('passport-citizenid');
 
 const app = express();
 
@@ -96,7 +96,8 @@ const app = express();
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID,
     clientSecret: process.env.CITIZENID_CLIENT_SECRET,
-    callbackURL: "http://localhost:3000/auth/citizenid/callback"
+    callbackURL: "http://localhost:3000/auth/citizenid/callback",
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL]
   },
   function(accessToken, refreshToken, profile, done) {
     // In a real application, you would save the user to your database
@@ -155,11 +156,13 @@ app.listen(3000, () => {
 For public clients (like single-page applications or mobile apps), you can omit the client secret and rely on PKCE:
 
 ```javascript
+const { Strategy: CitizenIDStrategy, Scopes } = require('passport-citizenid');
+
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID,
     callbackURL: "http://localhost:3000/auth/citizenid/callback",
     pkce: true, // Enabled by default
-    scope: ['openid', 'profile', 'email']
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL]
   },
   function(accessToken, refreshToken, profile, done) {
     return done(null, profile);
@@ -172,11 +175,13 @@ passport.use(new CitizenIDStrategy({
 To receive a refresh token, include the `offline_access` scope:
 
 ```javascript
+const { Strategy: CitizenIDStrategy, Scopes } = require('passport-citizenid');
+
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID,
     clientSecret: process.env.CITIZENID_CLIENT_SECRET,
     callbackURL: "http://localhost:3000/auth/citizenid/callback",
-    scope: ['openid', 'profile', 'email', 'roles', 'offline_access']
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS]
   },
   function(accessToken, refreshToken, profile, done) {
     // refreshToken will be available here
@@ -223,10 +228,10 @@ passport.use(new CitizenIDStrategy(options,
 
 ### Using Constants
 
-The package exports constants for scopes and endpoints:
+The package exports constants for scopes, endpoints, roles, and avatar claim keys:
 
 ```typescript
-import { Scopes, Endpoints } from 'passport-citizenid';
+import { Scopes, Endpoints, Roles, AvatarClaimKeys } from 'passport-citizenid';
 
 // Use scope constants
 passport.use(new CitizenIDStrategy({
@@ -241,6 +246,20 @@ passport.use(new CitizenIDStrategy({
   tokenURL: Endpoints.DEVELOPMENT.TOKEN,
   userInfoURL: Endpoints.DEVELOPMENT.USERINFO,
 }));
+
+// Check user roles using role constants
+function verify(accessToken, refreshToken, profile, done) {
+  const isIntegrator = profile.roles.includes(Roles.ACCOUNT_ROLE_INTEGRATOR);
+  const isVerified = profile.roles.includes(Roles.STATUS_VERIFIED);
+  // ...
+}
+
+// Access avatar URLs from custom claims
+if (profile._customClaims) {
+  const discordAvatar = profile._customClaims[AvatarClaimKeys.DISCORD];
+  const rsiAvatar = profile._customClaims[AvatarClaimKeys.RSI];
+  // ...
+}
 ```
 
 Available scope constants:
@@ -254,12 +273,30 @@ Available scope constants:
 - `Scopes.DISCORD_PROFILE` - Discord account information
 - `Scopes.RSI_PROFILE` - RSI (Roberts Space Industries) account information
 
+Available role constants:
+- `Roles.STATUS_VERIFIED` - Account has been linked with RSI and verified
+- `Roles.STATUS_BANNED` - Account has been suspended
+- `Roles.ACCOUNT_TYPE_ORGANIZATION` - Registered organization account
+- `Roles.ACCOUNT_TYPE_CITIZEN` - Individual user account
+- `Roles.ACCOUNT_ROLE_PARTNER` - Trusted external partner organization
+- `Roles.ACCOUNT_ROLE_INTEGRATOR` - Entity integrating with the Citizen iD platform
+- `Roles.INTERNAL_SYSTEM` - System-level operations (internal use only)
+- `Roles.INTERNAL_SUPER_ADMIN` - Highest administrative privileges (internal use only)
+- `Roles.INTERNAL_ADMIN` - Standard administrative privileges (internal use only)
+- `Roles.INTERNAL_MODERATOR` - Content moderation privileges (internal use only)
+
+**Note:** Internal roles are reserved for Citizen iD staff and should not be used in your applications.
+
+For backward compatibility, legacy role format constants are also available:
+- `LegacyRoles.INTEGRATOR` - `CitizenId.Integrator` (legacy format)
+- `LegacyRoles.CITIZEN` - `CitizenId.AccountType.Citizen` (legacy format)
+
 ### Accessing User Roles
 
 The Citizen iD profile includes user roles when the `roles` scope is requested:
 
 ```javascript
-const { Scopes } = require('passport-citizenid');
+const { Scopes, Roles, LegacyRoles } = require('passport-citizenid');
 
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID,
@@ -269,10 +306,13 @@ passport.use(new CitizenIDStrategy({
   },
   function(accessToken, refreshToken, profile, done) {
     console.log('User roles:', profile.roles);
-    // Example roles: ['CitizenId.AccountType.Citizen', 'CitizenId.Integrator']
     
-    // Check if user has a specific role
-    const isIntegrator = profile.roles.includes('CitizenId.Integrator');
+    // Check if user has a specific role using constants
+    const isIntegrator = profile.roles.includes(Roles.ACCOUNT_ROLE_INTEGRATOR) || 
+                         profile.roles.includes(LegacyRoles.INTEGRATOR);
+    const isVerified = profile.roles.includes(Roles.STATUS_VERIFIED);
+    const isCitizen = profile.roles.includes(Roles.ACCOUNT_TYPE_CITIZEN) ||
+                      profile.roles.includes(LegacyRoles.CITIZEN);
     
     return done(null, profile);
   }
@@ -352,10 +392,10 @@ For more information about Citizen iD's OAuth2 implementation, see the [Citizen 
 
 You can test the authorization flow using the [OAuth 2.0 Debugger](https://oauthdebugger.com/debug):
 
-1. Set Authorize URI to: `https://citizenid.space/connect/authorize`
+1. Set Authorize URI to: `Endpoints.PRODUCTION.AUTHORIZATION` (or use `Endpoints.DEVELOPMENT.AUTHORIZATION` for dev)
 2. Use your Client ID
 3. Set your callback URL
-4. Select the scopes you want to test
+4. Select the scopes you want to test (use `Scopes` constants)
 
 ## License
 

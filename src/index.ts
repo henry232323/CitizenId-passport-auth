@@ -4,7 +4,7 @@
 import { Strategy as OAuth2Strategy, StrategyOptions as OAuth2StrategyOptions, VerifyFunction } from 'passport-oauth2';
 import * as jwt from 'jsonwebtoken';
 import { EventEmitter } from 'events';
-import { Endpoints, getEndpoints } from './constants';
+import { Endpoints, getEndpoints, Scopes, AvatarClaimKeys, ALL_AVATAR_CLAIM_KEYS, CUSTOM_CLAIM_PREFIX } from './constants';
 
 /**
  * User profile information from Citizen iD.
@@ -23,7 +23,7 @@ export interface CitizenIDProfile {
     value: string;
   }>;
   authorizationId?: string;
-  _customClaims?: Record<string, any>; // Custom claims from scopes like discord.profile, rsi.profile, etc.
+  _customClaims?: Record<string, unknown>; // Custom claims from scopes like discord.profile, rsi.profile, etc.
   _raw: string;
   _json: CitizenIDUserInfo;
 }
@@ -49,7 +49,7 @@ export interface CitizenIDUserInfo {
   oi_tkn_id?: string;
   azp?: string;
   // Custom profile claims (available when corresponding scopes are requested)
-  [key: `urn:user:${string}`]: any;
+  [key: `urn:user:${string}`]: unknown;
 }
 
 /**
@@ -74,25 +74,25 @@ export interface CitizenIDStrategyOptions {
   
   /**
    * Array of permission scopes to request.
-   * @default ['openid', 'profile', 'email']
+   * @default [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL]
    */
   scope?: string[];
   
   /**
    * Authorization endpoint URL.
-   * @default 'https://citizenid.space/connect/authorize'
+   * @default Endpoints.PRODUCTION.AUTHORIZATION
    */
   authorizationURL?: string;
   
   /**
    * Token endpoint URL.
-   * @default 'https://citizenid.space/connect/token'
+   * @default Endpoints.PRODUCTION.TOKEN
    */
   tokenURL?: string;
   
   /**
    * UserInfo endpoint URL.
-   * @default 'https://citizenid.space/connect/userinfo'
+   * @default Endpoints.PRODUCTION.USERINFO
    */
   userInfoURL?: string;
   
@@ -112,7 +112,7 @@ export interface CitizenIDStrategyOptions {
    * Store state in session (when state is enabled).
    * @default true
    */
-  store?: any;
+  store?: unknown;
   
   /**
    * Pass request to verify callback.
@@ -121,7 +121,7 @@ export interface CitizenIDStrategyOptions {
   passReqToCallback?: boolean;
   
   // Allow other OAuth2StrategyOptions
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -155,18 +155,54 @@ export interface CitizenIDAuthorizationParams {
 }
 
 /**
- * Verify function type for Citizen iD strategy.
+ * Passport.js done callback type with generic user and info types
+ * @template TUser - The type of the user object (defaults to unknown)
+ * @template TInfo - The type of additional info (defaults to unknown)
  */
-export type CitizenIDVerifyFunction = 
-  | ((accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any, info?: any) => void) => void)
-  | ((accessToken: string, refreshToken: string, params: any, profile: CitizenIDProfile, done: (error: any, user?: any, info?: any) => void) => void);
+export type PassportDoneCallback<TUser = unknown, TInfo = unknown> = (
+  error: Error | null,
+  user?: TUser,
+  info?: TInfo
+) => void;
+
+/**
+ * Express Request type (minimal interface for type safety)
+ * @template T - Additional properties to extend the request object
+ */
+export interface ExpressRequest<T extends Record<string, unknown> = Record<string, unknown>> {
+  [key: string]: unknown;
+}
+
+/**
+ * OAuth2 token response parameters
+ * Additional fields may be present in the token response
+ */
+export interface OAuth2TokenParams {
+  id_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Verify function type for Citizen iD strategy.
+ * @template TUser - The type of the user object returned by the verify callback
+ * @template TInfo - The type of additional info passed to the done callback
+ */
+export type CitizenIDVerifyFunction<TUser = unknown, TInfo = unknown> = 
+  | ((accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
+  | ((accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void);
 
 /**
  * Verify function type with request parameter.
+ * @template TUser - The type of the user object returned by the verify callback
+ * @template TInfo - The type of additional info passed to the done callback
+ * @template TRequest - The type of the Express request object
  */
-export type CitizenIDVerifyFunctionWithRequest = 
-  | ((req: any, accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any, info?: any) => void) => void)
-  | ((req: any, accessToken: string, refreshToken: string, params: any, profile: CitizenIDProfile, done: (error: any, user?: any, info?: any) => void) => void);
+export type CitizenIDVerifyFunctionWithRequest<TUser = unknown, TInfo = unknown, TRequest extends ExpressRequest = ExpressRequest> = 
+  | ((req: TRequest, accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
+  | ((req: TRequest, accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void);
 
 /**
  * `Strategy` constructor.
@@ -183,10 +219,10 @@ export type CitizenIDVerifyFunctionWithRequest =
  *   - `clientID`          your Citizen iD application's client ID
  *   - `clientSecret`      your Citizen iD application's client secret (optional for public clients)
  *   - `callbackURL`       URL to which Citizen iD will redirect the user after granting authorization
- *   - `scope`             array of permission scopes to request (default: ['openid', 'profile', 'email'])
- *   - `authorizationURL`  URL used to obtain an authorization grant (default: 'https://citizenid.space/connect/authorize')
- *   - `tokenURL`          URL used to obtain an access token (default: 'https://citizenid.space/connect/token')
- *   - `userInfoURL`       URL used to obtain user info (default: 'https://citizenid.space/connect/userinfo')
+ *   - `scope`             array of permission scopes to request (default: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL])
+ *   - `authorizationURL`  URL used to obtain an authorization grant (default: Endpoints.PRODUCTION.AUTHORIZATION)
+ *   - `tokenURL`          URL used to obtain an access token (default: Endpoints.PRODUCTION.TOKEN)
+ *   - `userInfoURL`       URL used to obtain user info (default: Endpoints.PRODUCTION.USERINFO)
  *   - `pkce`              enable PKCE (default: true)
  *   - `state`             enable state parameter (default: true)
  *
@@ -213,11 +249,11 @@ export class Strategy extends OAuth2Strategy {
   name: string;
   private _userInfoURL: string;
   private _idToken?: string;
-  private _verify: CitizenIDVerifyFunction | CitizenIDVerifyFunctionWithRequest;
+  private _verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown>;
 
   constructor(
     options: CitizenIDStrategyOptions,
-    verify: CitizenIDVerifyFunction | CitizenIDVerifyFunctionWithRequest
+    verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown>
   ) {
     // Set default options - use production endpoints by default
     // If authorizationURL is provided, try to detect the environment from it
@@ -230,12 +266,14 @@ export class Strategy extends OAuth2Strategy {
     options.userInfoURL = options.userInfoURL || endpoints.USERINFO;
     
     // Ensure 'openid' scope is always included (required for OIDC)
-    options.scope = options.scope || ['openid', 'profile', 'email'];
+    options.scope = options.scope || [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL];
     if (!Array.isArray(options.scope)) {
       options.scope = [options.scope];
     }
-    if (!options.scope.includes('openid')) {
-      options.scope.unshift('openid');
+    // Check if openid scope is included (handle both string and constant)
+    const hasOpenId = options.scope.some(s => s === 'openid' || s === Scopes.OPENID);
+    if (!hasOpenId) {
+      options.scope.unshift(Scopes.OPENID);
     }
     
     // Enable PKCE by default (recommended for security)
@@ -252,13 +290,16 @@ export class Strategy extends OAuth2Strategy {
     const userInfoURL = options.userInfoURL;
     
     // Call the parent constructor with properly typed options
-    super(options as OAuth2StrategyOptions, verify as any);
+    // Note: verify needs to be cast because passport-oauth2's types are restrictive
+    super(options as OAuth2StrategyOptions, verify as VerifyFunction);
     
     this.name = 'citizenid';
     this._userInfoURL = userInfoURL;
     this._verify = verify;
     
     // Use authorization header for GET requests
+    // Accessing private _oauth2 property from parent class - necessary for functionality
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any)._oauth2.useAuthorizationHeaderforGET(true);
   }
 
@@ -298,10 +339,16 @@ export class Strategy extends OAuth2Strategy {
     }
     
     // Fall back to calling the userinfo endpoint
-    (this as any)._oauth2.get(this._userInfoURL, accessToken, (err: Error | null, body: string, res: any) => {
+    // Accessing private _oauth2 property from parent class - necessary for functionality
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (this as any)._oauth2.get(this._userInfoURL, accessToken, (err: Error | null, body: string, res: unknown) => {
       if (err) {
         const error = new Error('Failed to fetch user profile');
-        (error as any).cause = err;
+        // Node.js Error.cause is available in Node 16.9+, but TypeScript types may not reflect this
+        // Using type assertion for compatibility
+        if ('cause' in Error.prototype || typeof (err as { cause?: unknown }).cause !== 'undefined') {
+          (error as { cause?: unknown }).cause = err;
+        }
         return done(error);
       }
       
@@ -312,7 +359,10 @@ export class Strategy extends OAuth2Strategy {
         done(null, profile);
       } catch (ex) {
         const error = new Error('Failed to parse user profile');
-        (error as any).cause = ex;
+        // Node.js Error.cause is available in Node 16.9+, but TypeScript types may not reflect this
+        if ('cause' in Error.prototype || typeof (ex as { cause?: unknown }).cause !== 'undefined') {
+          (error as { cause?: unknown }).cause = ex;
+        }
         done(error);
       }
     });
@@ -357,18 +407,23 @@ export class Strategy extends OAuth2Strategy {
     
     // Add custom profile claims (discord, rsi, google, twitch) if available
     // These are prefixed with 'urn:user:' and available when corresponding scopes are requested
-    const customClaims: Record<string, any> = {};
+    const customClaims: Record<string, unknown> = {};
     const avatarUrls: string[] = [];
     
-    Object.keys(json).forEach(key => {
-      if (key.startsWith('urn:user:')) {
-        customClaims[key] = (json as any)[key];
-        
-        // Extract avatar URLs from custom claims
-        // Avatar URLs are provided as: urn:user:rsi:avatar:url, urn:user:discord:avatar:url, etc.
-        if (key.endsWith(':avatar:url') && (json as any)[key]) {
-          avatarUrls.push((json as any)[key]);
-        }
+    // Extract all custom claims (prefixed with 'urn:user:')
+    // Cast through unknown since CitizenIDUserInfo has an index signature for urn:user:* keys
+    const jsonRecord = json as unknown as Record<string, unknown>;
+    Object.keys(jsonRecord).forEach(key => {
+      if (key.startsWith(CUSTOM_CLAIM_PREFIX)) {
+        customClaims[key] = jsonRecord[key];
+      }
+    });
+    
+    // Extract avatar URLs using known avatar claim keys
+    ALL_AVATAR_CLAIM_KEYS.forEach(avatarKey => {
+      const avatarUrl = jsonRecord[avatarKey];
+      if (avatarUrl && typeof avatarUrl === 'string') {
+        avatarUrls.push(avatarUrl);
       }
     });
     
@@ -392,11 +447,13 @@ export class Strategy extends OAuth2Strategy {
    * @param {Function} callback
    * @api protected
    */
-  getOAuthAccessToken(code: string, params: any, callback: (err: Error | null, accessToken?: string, refreshToken?: string, params?: any) => void): void {
+  getOAuthAccessToken(code: string, params: Record<string, unknown>, callback: (err: Error | null, accessToken?: string, refreshToken?: string, params?: OAuth2TokenParams) => void): void {
     const self = this;
+    // Accessing protected method from parent class - necessary for functionality
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const originalGetOAuthAccessToken = (OAuth2Strategy.prototype as any).getOAuthAccessToken;
     
-    originalGetOAuthAccessToken.call(this, code, params, (err: Error | null, accessToken?: string, refreshToken?: string, params?: any) => {
+    originalGetOAuthAccessToken.call(this, code, params, (err: Error | null, accessToken?: string, refreshToken?: string, params?: OAuth2TokenParams) => {
       if (err) {
         return callback(err);
       }
@@ -417,8 +474,8 @@ export class Strategy extends OAuth2Strategy {
    * @return {Object}
    * @api protected
    */
-  authorizationParams(options: CitizenIDAuthorizationParams): any {
-    const params: any = {};
+  authorizationParams(options: CitizenIDAuthorizationParams): Record<string, string | number> {
+    const params: Record<string, string | number> = {};
     
     // Add nonce for OIDC (recommended for security)
     if (options.nonce) {
@@ -453,16 +510,44 @@ export class Strategy extends OAuth2Strategy {
 export * from './constants';
 import * as Constants from './constants';
 
+/**
+ * CommonJS module interface that includes the Strategy class and all constants
+ */
+interface CitizenIDModule {
+  Strategy: typeof Strategy;
+  default: typeof Strategy;
+  Scopes: typeof Constants.Scopes;
+  Endpoints: typeof Constants.Endpoints;
+  AvatarClaimKeys: typeof Constants.AvatarClaimKeys;
+  ALL_AVATAR_CLAIM_KEYS: typeof Constants.ALL_AVATAR_CLAIM_KEYS;
+  CUSTOM_CLAIM_PREFIX: typeof Constants.CUSTOM_CLAIM_PREFIX;
+  AVATAR_URL_SUFFIX: typeof Constants.AVATAR_URL_SUFFIX;
+  Roles: typeof Constants.Roles;
+  LegacyRoles: typeof Constants.LegacyRoles;
+  STANDARD_SCOPES: typeof Constants.STANDARD_SCOPES;
+  ALL_SCOPES: typeof Constants.ALL_SCOPES;
+  getEndpoints: typeof Constants.getEndpoints;
+}
+
 // Export as default and named export for CommonJS compatibility
 export default Strategy;
-// Also export as module.exports for backward compatibility
-module.exports = Strategy;
-(module.exports as any).Strategy = Strategy;
-(module.exports as any).default = Strategy;
-// Export constants for CommonJS
-(module.exports as any).Scopes = Constants.Scopes;
-(module.exports as any).Endpoints = Constants.Endpoints;
-(module.exports as any).AvatarClaimKeys = Constants.AvatarClaimKeys;
-(module.exports as any).STANDARD_SCOPES = Constants.STANDARD_SCOPES;
-(module.exports as any).ALL_SCOPES = Constants.ALL_SCOPES;
-(module.exports as any).getEndpoints = Constants.getEndpoints;
+
+// Create properly typed CommonJS export
+const moduleExports: CitizenIDModule = {
+  Strategy,
+  default: Strategy,
+  Scopes: Constants.Scopes,
+  Endpoints: Constants.Endpoints,
+  AvatarClaimKeys: Constants.AvatarClaimKeys,
+  ALL_AVATAR_CLAIM_KEYS: Constants.ALL_AVATAR_CLAIM_KEYS,
+  CUSTOM_CLAIM_PREFIX: Constants.CUSTOM_CLAIM_PREFIX,
+  AVATAR_URL_SUFFIX: Constants.AVATAR_URL_SUFFIX,
+  Roles: Constants.Roles,
+  LegacyRoles: Constants.LegacyRoles,
+  STANDARD_SCOPES: Constants.STANDARD_SCOPES,
+  ALL_SCOPES: Constants.ALL_SCOPES,
+  getEndpoints: Constants.getEndpoints,
+};
+
+// Export for CommonJS
+module.exports = moduleExports;
