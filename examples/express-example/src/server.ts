@@ -1,8 +1,15 @@
 import express, { Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import session from 'express-session';
-import { Strategy as CitizenIDStrategy, CitizenIDProfile } from 'passport-citizenid';
+import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes, Endpoints, getEndpoints } from 'passport-citizenid';
 import dotenv from 'dotenv';
+
+// Extend Express Request to include CitizenIDProfile
+declare global {
+  namespace Express {
+    interface User extends CitizenIDProfile {}
+  }
+}
 
 dotenv.config();
 
@@ -13,37 +20,35 @@ const app = express();
 // ============================================================================
 
 /**
- * Configure the CitizenID strategy for use by Passport.
+ * Configure the Citizen iD strategy for use by Passport.
  * 
  * OAuth 2.0-based strategies require a `verify` function which receives the
- * credential (`accessToken`) for accessing the CitizenID API on the user's
+ * credential (`accessToken`) for accessing the Citizen iD API on the user's
  * behalf, along with the user's profile. The function must invoke `done`
  * with a user object, which will be set at `req.user` in route handlers after
  * authentication.
  */
-// Determine the authority (dev or prod)
-const authority = process.env.CITIZENID_AUTHORITY || 'https://citizenid.space';
-const authorizationURL = `${authority}/connect/authorize`;
-const tokenURL = `${authority}/connect/token`;
-const userInfoURL = `${authority}/connect/userinfo`;
+// Determine the authority (dev or prod) and get endpoints
+const authority = process.env.CITIZENID_AUTHORITY || Endpoints.PRODUCTION.AUTHORITY;
+const endpoints = getEndpoints(authority);
 
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID!,
     clientSecret: process.env.CITIZENID_CLIENT_SECRET,
     callbackURL: process.env.CITIZENID_CALLBACK_URL || "http://localhost:3000/auth/citizenid/callback",
-    authorizationURL: authorizationURL,
-    tokenURL: tokenURL,
-    userInfoURL: userInfoURL,
+    authorizationURL: endpoints.AUTHORIZATION,
+    tokenURL: endpoints.TOKEN,
+    userInfoURL: endpoints.USERINFO,
     // Note: 'openid' scope is automatically added if missing (required for OIDC)
-    // You can also request custom profile scopes like 'discord.profile', 'rsi.profile', etc.
-    scope: ['openid', 'profile', 'email', 'roles', 'offline_access']
+    // Using scope constants for type safety
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS]
     // Example with custom profile scopes:
-    // scope: ['openid', 'profile', 'email', 'roles', 'offline_access', 'discord.profile', 'rsi.profile']
+    // scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS, Scopes.DISCORD_PROFILE, Scopes.RSI_PROFILE]
   },
   function verify(accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any) => void) {
-    // In this example, the user's CitizenID profile is returned to
+    // In this example, the user's Citizen iD profile is returned to
     // represent the logged-in user. In a typical application, you would want
-    // to associate the CitizenID account with a user record in your database,
+    // to associate the Citizen iD account with a user record in your database,
     // and return that user instead.
     
     console.log('Access Token:', accessToken);
@@ -130,9 +135,9 @@ app.get('/login', (req: Request, res: Response) => {
 });
 
 /**
- * Initiate OAuth 2.0 authorization code flow with CitizenID.
+ * Initiate OAuth 2.0 authorization code flow with Citizen iD.
  * 
- * This route will redirect the user to CitizenID where they will authenticate
+ * This route will redirect the user to Citizen iD where they will authenticate
  * and authorize this application to access their information.
  */
 app.get('/auth/citizenid', passport.authenticate('citizenid'));
@@ -140,7 +145,7 @@ app.get('/auth/citizenid', passport.authenticate('citizenid'));
 /**
  * OAuth 2.0 callback endpoint.
  * 
- * CitizenID will redirect the user to this URL after they complete the
+ * Citizen iD will redirect the user to this URL after they complete the
  * authorization process. The authorization code is included in the query string
  * and will be exchanged for an access token.
  */
@@ -220,7 +225,7 @@ app.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
-║   CitizenID Passport Example Server                              ║
+║   Citizen iD Passport Example Server                              ║
 ║                                                                   ║
 ║   Server is running on http://localhost:${PORT}                      ║
 ║                                                                   ║
@@ -242,9 +247,9 @@ app.listen(PORT, () => {
     console.warn('⚠️  WARNING: CITIZENID_CLIENT_SECRET is not set in .env file');
   }
   
-  const authority = process.env.CITIZENID_AUTHORITY || 'https://citizenid.space';
-  console.log(`\n📡 Using CitizenID Authority: ${authority}`);
+  const authority = process.env.CITIZENID_AUTHORITY || Endpoints.PRODUCTION.AUTHORITY;
+  console.log(`\n📡 Using Citizen iD Authority: ${authority}`);
   console.log('   (Set CITIZENID_AUTHORITY in .env to switch between dev/prod)\n');
   
-  console.log('Make sure to configure your .env file with your CitizenID credentials.\n');
+  console.log('Make sure to configure your .env file with your Citizen iD credentials.\n');
 });

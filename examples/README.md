@@ -4,7 +4,9 @@ This directory contains example applications demonstrating how to use `passport-
 
 ## Express.js Example
 
-The `express-example.js` file demonstrates a complete Express.js application with CitizenID authentication.
+The `express-example` directory contains a complete Express.js application with Citizen iD authentication (TypeScript source in `src/server.ts`).
+
+There is also a standalone example in `src/standalone-example.ts` that demonstrates a simpler setup.
 
 ### Setup
 
@@ -13,7 +15,9 @@ The `express-example.js` file demonstrates a complete Express.js application wit
 npm install express express-session passport
 ```
 
-2. Set environment variables:
+2. Get your client credentials by registering an application with Citizen iD. See the [Citizen iD OAuth2 Documentation](https://docs.citizenid.space/integrator-guide/oauth2/) for instructions.
+
+3. Set environment variables:
 ```bash
 export CITIZENID_CLIENT_ID="your-client-id"
 export CITIZENID_CLIENT_SECRET="your-client-secret"  # Optional for public clients
@@ -21,12 +25,14 @@ export CALLBACK_URL="http://localhost:3000/auth/citizenid/callback"
 export SESSION_SECRET="your-session-secret"
 ```
 
-3. Run the example:
+4. Run the example:
 ```bash
-node examples/express-example.js
+cd express-example
+npm install
+npm start
 ```
 
-4. Visit `http://localhost:3000` in your browser and click "Login with CitizenID"
+5. Visit `http://localhost:3000` in your browser and click "Login with Citizen iD"
 
 ### Features Demonstrated
 

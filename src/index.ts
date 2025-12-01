@@ -4,9 +4,10 @@
 import { Strategy as OAuth2Strategy, StrategyOptions as OAuth2StrategyOptions, VerifyFunction } from 'passport-oauth2';
 import * as jwt from 'jsonwebtoken';
 import { EventEmitter } from 'events';
+import { Endpoints, getEndpoints } from './constants';
 
 /**
- * User profile information from CitizenID.
+ * User profile information from Citizen iD.
  */
 export interface CitizenIDProfile {
   provider: 'citizenid';
@@ -52,22 +53,22 @@ export interface CitizenIDUserInfo {
 }
 
 /**
- * Strategy options for CitizenID authentication.
+ * Strategy options for Citizen iD authentication.
  */
 export interface CitizenIDStrategyOptions {
   /**
-   * Your CitizenID application's client ID.
+   * Your Citizen iD application's client ID.
    */
   clientID: string;
   
   /**
-   * Your CitizenID application's client secret.
+   * Your Citizen iD application's client secret.
    * Optional for public clients using PKCE.
    */
   clientSecret?: string;
   
   /**
-   * URL to which CitizenID will redirect the user after authorization.
+   * URL to which Citizen iD will redirect the user after authorization.
    */
   callbackURL: string;
   
@@ -154,7 +155,7 @@ export interface CitizenIDAuthorizationParams {
 }
 
 /**
- * Verify function type for CitizenID strategy.
+ * Verify function type for Citizen iD strategy.
  */
 export type CitizenIDVerifyFunction = 
   | ((accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: (error: any, user?: any, info?: any) => void) => void)
@@ -170,8 +171,8 @@ export type CitizenIDVerifyFunctionWithRequest =
 /**
  * `Strategy` constructor.
  *
- * The CitizenID authentication strategy authenticates requests by delegating to
- * CitizenID using the OAuth 2.0 protocol with OpenID Connect.
+ * The Citizen iD authentication strategy authenticates requests by delegating to
+ * Citizen iD using the OAuth 2.0 protocol with OpenID Connect.
  *
  * Applications must supply a `verify` callback which accepts an `accessToken`,
  * `refreshToken` and service-specific `profile`, and then calls the `done`
@@ -179,9 +180,9 @@ export type CitizenIDVerifyFunctionWithRequest =
  * credentials are not valid. If an exception occurred, `err` should be set.
  *
  * Options:
- *   - `clientID`          your CitizenID application's client ID
- *   - `clientSecret`      your CitizenID application's client secret (optional for public clients)
- *   - `callbackURL`       URL to which CitizenID will redirect the user after granting authorization
+ *   - `clientID`          your Citizen iD application's client ID
+ *   - `clientSecret`      your Citizen iD application's client secret (optional for public clients)
+ *   - `callbackURL`       URL to which Citizen iD will redirect the user after granting authorization
  *   - `scope`             array of permission scopes to request (default: ['openid', 'profile', 'email'])
  *   - `authorizationURL`  URL used to obtain an authorization grant (default: 'https://citizenid.space/connect/authorize')
  *   - `tokenURL`          URL used to obtain an access token (default: 'https://citizenid.space/connect/token')
@@ -218,10 +219,15 @@ export class Strategy extends OAuth2Strategy {
     options: CitizenIDStrategyOptions,
     verify: CitizenIDVerifyFunction | CitizenIDVerifyFunctionWithRequest
   ) {
-    // Set default options
-    options.authorizationURL = options.authorizationURL || 'https://citizenid.space/connect/authorize';
-    options.tokenURL = options.tokenURL || 'https://citizenid.space/connect/token';
-    options.userInfoURL = options.userInfoURL || 'https://citizenid.space/connect/userinfo';
+    // Set default options - use production endpoints by default
+    // If authorizationURL is provided, try to detect the environment from it
+    const providedAuthority = options.authorizationURL 
+      ? options.authorizationURL.replace('/connect/authorize', '').replace('/connect/token', '').replace('/connect/userinfo', '')
+      : undefined;
+    const endpoints = getEndpoints(providedAuthority || Endpoints.PRODUCTION.AUTHORITY);
+    options.authorizationURL = options.authorizationURL || endpoints.AUTHORIZATION;
+    options.tokenURL = options.tokenURL || endpoints.TOKEN;
+    options.userInfoURL = options.userInfoURL || endpoints.USERINFO;
     
     // Ensure 'openid' scope is always included (required for OIDC)
     options.scope = options.scope || ['openid', 'profile', 'email'];
@@ -257,13 +263,13 @@ export class Strategy extends OAuth2Strategy {
   }
 
   /**
-   * Retrieve user profile from CitizenID.
+   * Retrieve user profile from Citizen iD.
    *
    * This function constructs a normalized profile, with the following properties:
    *
    *   - `provider`         always set to `citizenid`
-   *   - `id`               the user's CitizenID ID (sub claim)
-   *   - `username`         the user's CitizenID username (preferred_username)
+   *   - `id`               the user's Citizen iD ID (sub claim)
+   *   - `username`         the user's Citizen iD username (preferred_username)
    *   - `displayName`      the user's full name (name)
    *   - `emails`           the user's email addresses
    *   - `roles`            the user's roles
@@ -313,7 +319,7 @@ export class Strategy extends OAuth2Strategy {
   }
 
   /**
-   * Normalize user profile data from CitizenID.
+   * Normalize user profile data from Citizen iD.
    *
    * @param {CitizenIDUserInfo} json - The user data from ID token or userinfo endpoint
    * @param {String} raw - The raw response
@@ -345,11 +351,6 @@ export class Strategy extends OAuth2Strategy {
       profile.roles = Array.isArray(json.role) ? json.role : [json.role];
     }
     
-    // Add additional profile fields
-    if (json.picture) {
-      profile.photos = [{ value: json.picture }];
-    }
-    
     if (json.oi_au_id) {
       profile.authorizationId = json.oi_au_id;
     }
@@ -357,11 +358,25 @@ export class Strategy extends OAuth2Strategy {
     // Add custom profile claims (discord, rsi, google, twitch) if available
     // These are prefixed with 'urn:user:' and available when corresponding scopes are requested
     const customClaims: Record<string, any> = {};
+    const avatarUrls: string[] = [];
+    
     Object.keys(json).forEach(key => {
       if (key.startsWith('urn:user:')) {
         customClaims[key] = (json as any)[key];
+        
+        // Extract avatar URLs from custom claims
+        // Avatar URLs are provided as: urn:user:rsi:avatar:url, urn:user:discord:avatar:url, etc.
+        if (key.endsWith(':avatar:url') && (json as any)[key]) {
+          avatarUrls.push((json as any)[key]);
+        }
       }
     });
+    
+    // Add photos from avatar URLs if available
+    if (avatarUrls.length > 0) {
+      profile.photos = avatarUrls.map(url => ({ value: url }));
+    }
+    
     if (Object.keys(customClaims).length > 0) {
       profile._customClaims = customClaims;
     }
@@ -434,9 +449,20 @@ export class Strategy extends OAuth2Strategy {
   }
 }
 
+// Export constants
+export * from './constants';
+import * as Constants from './constants';
+
 // Export as default and named export for CommonJS compatibility
 export default Strategy;
 // Also export as module.exports for backward compatibility
 module.exports = Strategy;
 (module.exports as any).Strategy = Strategy;
 (module.exports as any).default = Strategy;
+// Export constants for CommonJS
+(module.exports as any).Scopes = Constants.Scopes;
+(module.exports as any).Endpoints = Constants.Endpoints;
+(module.exports as any).AvatarClaimKeys = Constants.AvatarClaimKeys;
+(module.exports as any).STANDARD_SCOPES = Constants.STANDARD_SCOPES;
+(module.exports as any).ALL_SCOPES = Constants.ALL_SCOPES;
+(module.exports as any).getEndpoints = Constants.getEndpoints;

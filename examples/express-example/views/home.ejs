@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CitizenID Passport Example</title>
+  <title>Citizen iD Passport Example</title>
   <style>
     * {
       margin: 0;
@@ -147,7 +147,7 @@
     <% if (user) { %>
       <div class="welcome-icon">👋</div>
       <h1>Welcome, <%= user.displayName %>!</h1>
-      <p class="subtitle">You are successfully authenticated with CitizenID</p>
+      <p class="subtitle">You are successfully authenticated with Citizen iD</p>
       
       <div class="user-info">
         <h2>Your Profile</h2>
@@ -194,17 +194,17 @@
       </div>
     <% } else { %>
       <div class="welcome-icon">🔐</div>
-      <h1>CitizenID Authentication</h1>
+      <h1>Citizen iD Authentication</h1>
       <p class="subtitle">Secure OAuth2 & OpenID Connect authentication with Passport.js</p>
       
       <div style="margin: 40px 0;">
         <p style="color: #666; line-height: 1.8;">
           This is a demonstration of the <strong>passport-citizenid</strong> strategy.
-          Click the button below to authenticate with your CitizenID account.
+          Click the button below to authenticate with your Citizen iD account.
         </p>
       </div>
       
-      <a href="/auth/citizenid" class="btn btn-primary">Login with CitizenID</a>
+      <a href="/auth/citizenid" class="btn btn-primary">Login with Citizen iD</a>
     <% } %>
   </div>
 </body>

@@ -1,8 +1,8 @@
 # passport-citizenid
 
-[Passport](http://passportjs.org/) strategy for authenticating with [CitizenID](https://citizenid.space/) using the OAuth 2.0 API with OpenID Connect.
+[Passport](http://passportjs.org/) strategy for authenticating with [Citizen iD](https://citizenid.space/) using the OAuth 2.0 API with OpenID Connect.
 
-This module lets you authenticate using CitizenID in your Node.js applications. By plugging into Passport, CitizenID authentication can be easily and unobtrusively integrated into any application or framework that supports [Connect](http://www.senchalabs.org/connect/)-style middleware, including [Express](http://expressjs.com/).
+This module lets you authenticate using Citizen iD in your Node.js applications. By plugging into Passport, Citizen iD authentication can be easily and unobtrusively integrated into any application or framework that supports [Connect](http://www.senchalabs.org/connect/)-style middleware, including [Express](http://expressjs.com/).
 
 ## Installation
 
@@ -14,7 +14,7 @@ npm install passport-citizenid
 
 ### Configure Strategy
 
-The CitizenID authentication strategy authenticates users using a CitizenID account and OAuth 2.0 tokens with OpenID Connect. The strategy requires a `verify` callback, which accepts these credentials and calls `done` providing a user, as well as `options` specifying a client ID, client secret, and callback URL.
+The Citizen iD authentication strategy authenticates users using a Citizen iD account and OAuth 2.0 tokens with OpenID Connect. The strategy requires a `verify` callback, which accepts these credentials and calls `done` providing a user, as well as `options` specifying a client ID, client secret, and callback URL.
 
 ```javascript
 const CitizenIDStrategy = require('passport-citizenid').Strategy;
@@ -53,14 +53,18 @@ app.get('/auth/citizenid/callback',
 
 ## Configuration Options
 
+### Getting Client Credentials
+
+To use this strategy, you'll need to register an application with Citizen iD and obtain your client credentials. For detailed instructions on how to create and configure your OAuth2 client, see the [Citizen iD OAuth2 Documentation](https://docs.citizenid.space/integrator-guide/oauth2/).
+
 ### Required Options
 
-- **clientID**: Your CitizenID application's Client ID
-- **callbackURL**: URL to which CitizenID will redirect the user after granting authorization
+- **clientID**: Your Citizen iD application's Client ID
+- **callbackURL**: URL to which Citizen iD will redirect the user after granting authorization
 
 ### Optional Options
 
-- **clientSecret**: Your CitizenID application's Client Secret (optional for public clients using PKCE)
+- **clientSecret**: Your Citizen iD application's Client Secret (optional for public clients using PKCE)
 - **scope**: Array of permission scopes to request
   - Default: `['openid', 'profile', 'email']`
   - Available scopes: `openid`, `profile`, `email`, `roles`, `offline_access`
@@ -122,7 +126,7 @@ app.get('/', (req, res) => {
   if (req.isAuthenticated()) {
     res.send(`Hello ${req.user.displayName}! <a href="/logout">Logout</a>`);
   } else {
-    res.send('<a href="/auth/citizenid">Login with CitizenID</a>');
+    res.send('<a href="/auth/citizenid">Login with Citizen iD</a>');
   }
 });
 
@@ -199,14 +203,14 @@ app.get('/auth/citizenid',
 ### TypeScript Usage
 
 ```typescript
-import { Strategy as CitizenIDStrategy, CitizenIDProfile, CitizenIDStrategyOptions } from 'passport-citizenid';
+import { Strategy as CitizenIDStrategy, CitizenIDProfile, CitizenIDStrategyOptions, Scopes, Endpoints } from 'passport-citizenid';
 import passport from 'passport';
 
 const options: CitizenIDStrategyOptions = {
   clientID: process.env.CITIZENID_CLIENT_ID!,
   clientSecret: process.env.CITIZENID_CLIENT_SECRET,
   callbackURL: "http://localhost:3000/auth/citizenid/callback",
-  scope: ['openid', 'profile', 'email', 'roles']
+  scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES]
 };
 
 passport.use(new CitizenIDStrategy(options,
@@ -217,16 +221,51 @@ passport.use(new CitizenIDStrategy(options,
 ));
 ```
 
+### Using Constants
+
+The package exports constants for scopes and endpoints:
+
+```typescript
+import { Scopes, Endpoints } from 'passport-citizenid';
+
+// Use scope constants
+passport.use(new CitizenIDStrategy({
+  // ...
+  scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES, Scopes.OFFLINE_ACCESS]
+}));
+
+// Use endpoint constants for custom configuration
+passport.use(new CitizenIDStrategy({
+  // ...
+  authorizationURL: Endpoints.DEVELOPMENT.AUTHORIZATION, // For dev environment
+  tokenURL: Endpoints.DEVELOPMENT.TOKEN,
+  userInfoURL: Endpoints.DEVELOPMENT.USERINFO,
+}));
+```
+
+Available scope constants:
+- `Scopes.OPENID` - Required for OpenID Connect
+- `Scopes.PROFILE` - Basic profile information
+- `Scopes.EMAIL` - Email address
+- `Scopes.ROLES` - User roles
+- `Scopes.OFFLINE_ACCESS` - Refresh token
+- `Scopes.GOOGLE_PROFILE` - Google account information
+- `Scopes.TWITCH_PROFILE` - Twitch account information
+- `Scopes.DISCORD_PROFILE` - Discord account information
+- `Scopes.RSI_PROFILE` - RSI (Roberts Space Industries) account information
+
 ### Accessing User Roles
 
-The CitizenID profile includes user roles when the `roles` scope is requested:
+The Citizen iD profile includes user roles when the `roles` scope is requested:
 
 ```javascript
+const { Scopes } = require('passport-citizenid');
+
 passport.use(new CitizenIDStrategy({
     clientID: process.env.CITIZENID_CLIENT_ID,
     clientSecret: process.env.CITIZENID_CLIENT_SECRET,
     callbackURL: "http://localhost:3000/auth/citizenid/callback",
-    scope: ['openid', 'profile', 'email', 'roles']
+    scope: [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL, Scopes.ROLES]
   },
   function(accessToken, refreshToken, profile, done) {
     console.log('User roles:', profile.roles);
@@ -242,7 +281,7 @@ passport.use(new CitizenIDStrategy({
 
 ## Profile Structure
 
-The user profile returned by CitizenID contains the following fields:
+The user profile returned by Citizen iD contains the following fields:
 
 ```javascript
 {
@@ -252,7 +291,7 @@ The user profile returned by CitizenID contains the following fields:
   displayName: 'thekronny',
   emails: [
     {
-      value: 'kronny4@gmail.com',
+      value: '...',
       verified: false
     }
   ],
@@ -260,23 +299,33 @@ The user profile returned by CitizenID contains the following fields:
     'CitizenId.AccountType.Citizen',
     'CitizenId.Integrator'
   ],
-  photos: [
+  photos: [  // Avatar URLs from custom profile scopes (e.g., discord.profile, rsi.profile)
     {
-      value: 'https://...'
+      value: 'https://cdn.discordapp.com/avatars/...'  // From urn:user:discord:avatar:url
+    },
+    {
+      value: 'https://robertsspaceindustries.com/...'  // From urn:user:rsi:avatar:url
     }
   ],
   authorizationId: '0199a3df-6c1a-70e8-acf8-db72fd00a0ff',
+  _customClaims: {  // All custom claims (urn:user:*)
+    'urn:user:discord:avatar:url': 'https://...',
+    'urn:user:rsi:avatar:url': 'https://...',
+    // ... other custom claims
+  },
   _raw: '...',
   _json: {
     sub: '0199a109-3662-7f83-b155-5bc53db7bf26',
     name: 'thekronny',
     preferred_username: 'thekronny',
-    email: 'kronny4@gmail.com',
+    email: '...',
     role: ['CitizenId.AccountType.Citizen', 'CitizenId.Integrator'],
     // ... other OIDC claims
   }
 }
 ```
+
+**Note:** Avatar URLs are automatically extracted from custom profile claims (e.g., `urn:user:discord:avatar:url`, `urn:user:rsi:avatar:url`) and added to the `photos` array when the corresponding profile scopes are requested.
 
 ## OAuth2 Flows Supported
 
@@ -285,7 +334,7 @@ This strategy supports the following OAuth2 flows:
 - **Authorization Code Flow** (with PKCE support)
 - **Refresh Token Flow** (when `offline_access` scope is requested)
 
-For more information about CitizenID's OAuth2 implementation, see the [CitizenID OAuth2 Documentation](https://docs.citizenid.space/integrator-guide/oauth2/flows-grants.html).
+For more information about Citizen iD's OAuth2 implementation, see the [Citizen iD OAuth2 Documentation](https://docs.citizenid.space/integrator-guide/oauth2/flows-grants.html).
 
 ## Security Considerations
 
@@ -318,7 +367,7 @@ For issues, questions, or contributions, please visit the [GitHub repository](ht
 
 ## Related Resources
 
-- [CitizenID Documentation](https://docs.citizenid.space/)
+- [Citizen iD Documentation](https://docs.citizenid.space/)
 - [Passport.js Documentation](http://www.passportjs.org/)
 - [OAuth 2.0 Specification](https://oauth.net/2/)
 - [OpenID Connect Specification](https://openid.net/connect/)

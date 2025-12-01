@@ -1,10 +1,10 @@
-# CitizenID Passport Example - Express.js
+# Citizen iD Passport Example - Express.js
 
 This is a complete example application demonstrating how to use `passport-citizenid` with Express.js.
 
 ## Features
 
-- OAuth 2.0 authentication with CitizenID
+- OAuth 2.0 authentication with Citizen iD
 - OpenID Connect support
 - Session management
 - User profile display
@@ -28,7 +28,7 @@ Copy the `.env.example` file to `.env`:
 cp .env.example .env
 ```
 
-Then edit `.env` and add your CitizenID credentials:
+Then edit `.env` and add your Citizen iD credentials:
 
 ```env
 CITIZENID_CLIENT_ID=your-client-id-here
@@ -37,11 +37,11 @@ CITIZENID_CALLBACK_URL=http://localhost:3000/auth/citizenid/callback
 SESSION_SECRET=change-this-to-a-random-secret
 ```
 
-### 3. Get CitizenID Credentials
+### 3. Get Citizen iD Credentials
 
-To get your CitizenID OAuth2 credentials:
+To get your Citizen iD OAuth2 credentials:
 
-1. Visit [CitizenID](https://citizenid.space/)
+1. Visit [Citizen iD](https://citizenid.space/)
 2. Create or log into your account
 3. Register a new application
 4. Set the callback URL to: `http://localhost:3000/auth/citizenid/callback`
@@ -89,7 +89,7 @@ express-example/
 
 - `GET /` - Home page (shows login button or user info)
 - `GET /login` - Login page
-- `GET /auth/citizenid` - Initiates OAuth flow with CitizenID
+- `GET /auth/citizenid` - Initiates OAuth flow with Citizen iD
 - `GET /auth/citizenid/callback` - OAuth callback endpoint
 - `GET /profile` - User profile page (requires authentication)
 - `GET /logout` - Logout and clear session
@@ -98,10 +98,10 @@ express-example/
 
 ### 1. User Authentication Flow
 
-1. User clicks "Login with CitizenID"
-2. Application redirects to CitizenID authorization page
+1. User clicks "Login with Citizen iD"
+2. Application redirects to Citizen iD authorization page
 3. User authenticates and authorizes the application
-4. CitizenID redirects back to callback URL with authorization code
+4. Citizen iD redirects back to callback URL with authorization code
 5. Application exchanges code for access token and ID token
 6. User profile is retrieved from ID token
 7. User is logged in and session is created
@@ -184,7 +184,7 @@ Make sure your `.env` file is properly configured with valid `CITIZENID_CLIENT_I
 
 ### "Callback URL mismatch" error
 
-Ensure the callback URL in your `.env` file matches the one registered in your CitizenID application settings.
+Ensure the callback URL in your `.env` file matches the one registered in your Citizen iD application settings.
 
 ### Session not persisting
 
@@ -195,7 +195,7 @@ Check that:
 
 ## Learn More
 
-- [CitizenID Documentation](https://docs.citizenid.space/)
+- [Citizen iD Documentation](https://docs.citizenid.space/)
 - [Passport.js Documentation](http://www.passportjs.org/)
 - [Express.js Documentation](https://expressjs.com/)
 
