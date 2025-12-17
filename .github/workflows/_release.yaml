@@ -46,7 +46,7 @@ jobs:
         with:
           fetch-tags: true
 
-      - uses: ./.github/workflows/_setup.yaml
+      - uses: .github/actions/setup-node
         with:
           node-version: ${{ env.NODE_VERSION }}
 
