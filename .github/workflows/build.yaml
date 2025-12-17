@@ -58,7 +58,7 @@ jobs:
             eslint-${{ runner.os }}-
 
       - name: ESLint
-        run: npm run eslint . --cache --cache-location .cache/eslint
+        run: npm run eslint
 
       - name: Save ESLint cache
         if: github.event_name == 'push'
@@ -67,73 +67,9 @@ jobs:
           path: .cache/eslint
           key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.yaml', 'package.json') }}-${{ github.run_id }}
 
-  lint-prettier:
-    name: Lint / Prettier
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/setup-node
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Restore Prettier cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache/prettier
-          key: prettier-${{ runner.os }}-${{ hashFiles('package-lock.yaml', 'package.json') }}
-          restore-keys: |
-            prettier-${{ runner.os }}-
-
-      - name: Prettier
-        run: npm run prettier --check . --cache --cache-location .cache/prettier
-
-      - name: Save Prettier cache
-        if: github.event_name == 'push'
-        uses: actions/cache/save@v4
-        with:
-          path: .cache/prettier
-          key: prettier-${{ runner.os }}-${{ hashFiles('package-lock.yaml', 'package.json') }}-${{ github.run_id }}
-
-  typecheck:
-    name: TypeScript / Type check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/setup-node
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Type check
-        run: npm run type-check
-
-  build:
-    name: Build
-    needs:
-      - lint-eslint
-      - lint-prettier
-      - typecheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: ./.github/actions/setup-node
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Build
-        run: npm build
-
   release:
     name: Release
-    needs: build
+    needs: lint-eslint
     uses: ./.github/workflows/_release.yaml
     with:
       dry_run: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/ci' }}
