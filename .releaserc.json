@@ -6,7 +6,7 @@
         },
         {
             "name": "main",
-            "channel": "staging",
+            "channel": "dev",
             "prerelease": "dev"
         },
         {
