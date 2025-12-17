@@ -15,7 +15,7 @@
             "prerelease": "ci-do-not-use"
         }
     ],
-    "repositoryUrl": "https://github.com/ArkanisCorporation/CitizenId",
+    "repositoryUrl": "https://github.com/ArkanisCorporation/CitizenId-passport-auth",
     "tagFormat": "v${version}",
     "debug": false,
     "plugins": [
