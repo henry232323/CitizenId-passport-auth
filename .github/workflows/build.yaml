@@ -3,8 +3,8 @@ on:
   push:
     branches:
       - main
-      - next
-      - maint/**
+      - release/**
+      - ci
 
   pull_request:
     types:
