@@ -3,8 +3,18 @@
  */
 import { Strategy as OAuth2Strategy, StrategyOptions as OAuth2StrategyOptions, VerifyFunction } from 'passport-oauth2';
 import * as jwt from 'jsonwebtoken';
-import { EventEmitter } from 'events';
-import { Endpoints, getEndpoints, Scopes, AvatarClaimKeys, ALL_AVATAR_CLAIM_KEYS, CUSTOM_CLAIM_PREFIX } from './constants';
+import { 
+  Endpoints, 
+  getEndpoints, 
+  Scopes, 
+  AvatarClaimKeys, 
+  ALL_AVATAR_CLAIM_KEYS, 
+  CUSTOM_CLAIM_PREFIX,
+  GoogleClaimKeys,
+  TwitchClaimKeys,
+  DiscordClaimKeys,
+  RSIClaimKeys
+} from './constants.js';
 
 /**
  * Helper function to set error cause (for Node.js 16.9+ compatibility)
@@ -19,6 +29,61 @@ function setErrorCause(error: Error, cause: unknown): void {
   } catch {
     // If setting cause fails, ignore (older Node.js versions)
   }
+}
+
+/**
+ * Google profile custom claims (available when google.profile scope is requested).
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export interface GoogleProfileClaims {
+  [GoogleClaimKeys.AVATAR_URL]?: string;
+  [GoogleClaimKeys.EMAIL]?: string;
+  [GoogleClaimKeys.NAME]?: string;
+  [GoogleClaimKeys.ACCOUNT_ID]?: string;
+}
+
+/**
+ * Twitch profile custom claims (available when twitch.profile scope is requested).
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export interface TwitchProfileClaims {
+  [TwitchClaimKeys.AVATAR_URL]?: string;
+  [TwitchClaimKeys.EMAIL]?: string;
+  [TwitchClaimKeys.USERNAME]?: string;
+  [TwitchClaimKeys.ACCOUNT_ID]?: string;
+}
+
+/**
+ * Discord profile custom claims (available when discord.profile scope is requested).
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export interface DiscordProfileClaims {
+  [DiscordClaimKeys.AVATAR_URL]?: string;
+  [DiscordClaimKeys.USERNAME]?: string;
+  [DiscordClaimKeys.ACCOUNT_ID]?: string;
+  [DiscordClaimKeys.SCOPES]?: string | string[];
+}
+
+/**
+ * RSI profile custom claims (available when rsi.profile scope is requested).
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export interface RSIProfileClaims {
+  [RSIClaimKeys.AVATAR_URL]?: string;
+  [RSIClaimKeys.USERNAME]?: string;
+  [RSIClaimKeys.ENLISTED_AT]?: string;
+  [RSIClaimKeys.CITIZEN_ID]?: string;
+  [RSIClaimKeys.SPECTRUM_ID]?: string;
+}
+
+/**
+ * All custom profile claims combined.
+ */
+export interface CustomProfileClaims {
+  google?: GoogleProfileClaims;
+  twitch?: TwitchProfileClaims;
+  discord?: DiscordProfileClaims;
+  rsi?: RSIProfileClaims;
 }
 
 /**
@@ -38,7 +103,13 @@ export interface CitizenIDProfile {
     value: string;
   }>;
   authorizationId?: string;
-  _customClaims?: Record<string, unknown>; // Custom claims from scopes like discord.profile, rsi.profile, etc.
+  // Typed custom claims (populated when corresponding scopes are requested)
+  google?: GoogleProfileClaims;
+  twitch?: TwitchProfileClaims;
+  discord?: DiscordProfileClaims;
+  rsi?: RSIProfileClaims;
+  // Raw custom claims object (for backward compatibility and access to all urn:user:* claims)
+  _customClaims?: Record<string, unknown>;
   _raw: string;
   _json: CitizenIDUserInfo;
 }
@@ -63,7 +134,29 @@ export interface CitizenIDUserInfo {
   at_hash?: string;
   oi_tkn_id?: string;
   azp?: string;
-  // Custom profile claims (available when corresponding scopes are requested)
+  // Typed Google profile claims (available when google.profile scope is requested)
+  // Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+  [GoogleClaimKeys.AVATAR_URL]?: string;
+  [GoogleClaimKeys.EMAIL]?: string;
+  [GoogleClaimKeys.NAME]?: string;
+  [GoogleClaimKeys.ACCOUNT_ID]?: string;
+  // Typed Twitch profile claims (available when twitch.profile scope is requested)
+  [TwitchClaimKeys.AVATAR_URL]?: string;
+  [TwitchClaimKeys.EMAIL]?: string;
+  [TwitchClaimKeys.USERNAME]?: string;
+  [TwitchClaimKeys.ACCOUNT_ID]?: string;
+  // Typed Discord profile claims (available when discord.profile scope is requested)
+  [DiscordClaimKeys.AVATAR_URL]?: string;
+  [DiscordClaimKeys.USERNAME]?: string;
+  [DiscordClaimKeys.ACCOUNT_ID]?: string;
+  [DiscordClaimKeys.SCOPES]?: string | string[];
+  // Typed RSI profile claims (available when rsi.profile scope is requested)
+  [RSIClaimKeys.AVATAR_URL]?: string;
+  [RSIClaimKeys.USERNAME]?: string;
+  [RSIClaimKeys.ENLISTED_AT]?: string;
+  [RSIClaimKeys.CITIZEN_ID]?: string;
+  [RSIClaimKeys.SPECTRUM_ID]?: string;
+  // Allow other custom claims with urn:user: prefix (for future extensibility)
   [key: `urn:user:${string}`]: unknown;
 }
 
@@ -71,6 +164,23 @@ export interface CitizenIDUserInfo {
  * Strategy options for Citizen iD authentication.
  */
 export interface CitizenIDStrategyOptions {
+  /**
+   * Authority (base URL) for Citizen iD (e.g., https://citizenid.space or https://dev.citizenid.space).
+   * If provided, endpoints are derived automatically via getEndpoints(authority).
+   */
+  authority?: string;
+
+  /**
+   * Optional explicit endpoints. If provided, these override derived or default endpoints.
+   */
+  endpoints?: {
+    authorizationURL?: string;
+    tokenURL?: string;
+    userInfoURL?: string;
+    revokeURL?: string;
+    discoveryURL?: string;
+  };
+
   /**
    * Your Citizen iD application's client ID.
    */
@@ -189,6 +299,12 @@ export interface ExpressRequest<T extends Record<string, unknown> = Record<strin
 }
 
 /**
+ * Type that accepts both Express Request and our ExpressRequest interface
+ * This is intentionally permissive to accept any request-like object
+ */
+export type AnyRequest = ExpressRequest | { [key: string]: unknown } | any
+
+/**
  * OAuth2 token response parameters
  * Additional fields may be present in the token response
  */
@@ -207,7 +323,9 @@ export interface OAuth2TokenParams {
  */
 export type CitizenIDVerifyFunction<TUser = unknown, TInfo = unknown> = 
   | ((accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
-  | ((accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void);
+  | ((accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => Promise<void>)
+  | ((accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
+  | ((accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => Promise<void>);
 
 /**
  * Verify function type with request parameter.
@@ -215,9 +333,11 @@ export type CitizenIDVerifyFunction<TUser = unknown, TInfo = unknown> =
  * @template TInfo - The type of additional info passed to the done callback
  * @template TRequest - The type of the Express request object
  */
-export type CitizenIDVerifyFunctionWithRequest<TUser = unknown, TInfo = unknown, TRequest extends ExpressRequest = ExpressRequest> = 
+export type CitizenIDVerifyFunctionWithRequest<TUser = unknown, TInfo = unknown, TRequest extends AnyRequest = AnyRequest> = 
   | ((req: TRequest, accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
-  | ((req: TRequest, accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void);
+  | ((req: TRequest, accessToken: string, refreshToken: string, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => Promise<void>)
+  | ((req: TRequest, accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => void)
+  | ((req: TRequest, accessToken: string, refreshToken: string, params: OAuth2TokenParams, profile: CitizenIDProfile, done: PassportDoneCallback<TUser, TInfo>) => Promise<void>);
 
   /**
    * `Strategy` constructor.
@@ -268,11 +388,11 @@ export class Strategy extends OAuth2Strategy {
   name: string;
   private _userInfoURL: string;
   private _idToken?: string;
-  private _verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown>;
+  private _verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown, AnyRequest>;
 
   constructor(
     options: CitizenIDStrategyOptions,
-    verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown>
+    verify: CitizenIDVerifyFunction<unknown, unknown> | CitizenIDVerifyFunctionWithRequest<unknown, unknown, AnyRequest>
   ) {
     // Validate required options
     if (!options.clientID) {
@@ -285,46 +405,105 @@ export class Strategy extends OAuth2Strategy {
       throw new Error('CitizenIDStrategy requires a verify callback function');
     }
     
-    // Set default options - use production endpoints by default
-    // If authorizationURL is provided, try to detect the environment from it
-    const providedAuthority = options.authorizationURL 
-      ? options.authorizationURL.replace('/connect/authorize', '').replace('/connect/token', '').replace('/connect/userinfo', '')
-      : undefined;
-    const endpoints = getEndpoints(providedAuthority || Endpoints.PRODUCTION.AUTHORITY);
-    options.authorizationURL = options.authorizationURL || endpoints.AUTHORIZATION;
-    options.tokenURL = options.tokenURL || endpoints.TOKEN;
-    options.userInfoURL = options.userInfoURL || endpoints.USERINFO;
+    // Resolve endpoints
+    // Priority:
+    // 1) Explicit endpoints option
+    // 2) authority option via getEndpoints(authority)
+    // 3) authority inferred from provided authorizationURL
+    // 4) defaults (production)
+    let resolvedAuthority: string | undefined = options.authority;
+    if (!resolvedAuthority && options.authorizationURL) {
+      const urlMatch = options.authorizationURL.match(/^https?:\/\/([^/]+)/);
+      if (urlMatch) {
+        resolvedAuthority = `https://${urlMatch[1]}`;
+      }
+    }
+    const derivedEndpoints = getEndpoints(resolvedAuthority || Endpoints.PRODUCTION.AUTHORITY);
+    const endpointsOverride = options.endpoints || {};
+    options.authorizationURL = options.authorizationURL || endpointsOverride.authorizationURL || derivedEndpoints.AUTHORIZATION;
+    options.tokenURL = options.tokenURL || endpointsOverride.tokenURL || derivedEndpoints.TOKEN;
+    options.userInfoURL = options.userInfoURL || endpointsOverride.userInfoURL || derivedEndpoints.USERINFO;
     
     // Ensure 'openid' scope is always included (required for OIDC)
-    options.scope = options.scope || [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL];
-    if (!Array.isArray(options.scope)) {
+    if (!options.scope) {
+      options.scope = [Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL];
+    } else if (!Array.isArray(options.scope)) {
       options.scope = [options.scope];
     }
-    // Check if openid scope is included (handle both string and constant)
     const hasOpenId = options.scope.some(s => s === 'openid' || s === Scopes.OPENID);
     if (!hasOpenId) {
       options.scope.unshift(Scopes.OPENID);
     }
     
-    // Enable PKCE by default (recommended for security)
-    if (options.pkce === undefined) {
-      options.pkce = true;
+    // Enable PKCE and state by default
+    if (options.pkce === undefined) options.pkce = true;
+    if (options.state === undefined) options.state = true;
+    
+    // Enable passReqToCallback based on verify arity
+    const fnLength = (verify as Function).length;
+    const hasRequestParam = fnLength >= 5;
+    const hasParamsParam = hasRequestParam ? fnLength === 6 : fnLength === 5;
+    if (hasRequestParam && options.passReqToCallback === undefined) {
+      options.passReqToCallback = true;
     }
     
-    // Enable state parameter by default
-    if (options.state === undefined) {
-      options.state = true;
-    }
-
-    // Store userInfoURL for later use
-    const userInfoURL = options.userInfoURL;
+    // Wrap verify to adapt to passport-oauth2 calling convention (params may be inserted)
+    const wrappedVerify: VerifyFunction = (...args: any[]) => {
+      if (hasRequestParam && options.passReqToCallback) {
+        // passport-oauth2 passes: req, accessToken, refreshToken, params, profile, done
+        const req = args[0] as AnyRequest;
+        const accessToken = args[1] as string;
+        const refreshToken = args[2] as string;
+        const params = args[3] as OAuth2TokenParams;
+        const profile = args[4] as CitizenIDProfile;
+        const done = args[5] as PassportDoneCallback<unknown, unknown>;
+        if (hasParamsParam) {
+          return (verify as (
+            req: AnyRequest,
+            accessToken: string,
+            refreshToken: string,
+            params: OAuth2TokenParams,
+            profile: CitizenIDProfile,
+            done: PassportDoneCallback<unknown, unknown>
+          ) => void | Promise<void>)(req, accessToken, refreshToken, params, profile, done);
+        }
+        return (verify as (
+          req: AnyRequest,
+          accessToken: string,
+          refreshToken: string,
+          profile: CitizenIDProfile,
+          done: PassportDoneCallback<unknown, unknown>
+        ) => void | Promise<void>)(req, accessToken, refreshToken, profile, done);
+      } else {
+        // passport-oauth2 passes: accessToken, refreshToken, params, profile, done
+        const accessToken = args[0] as string;
+        const refreshToken = args[1] as string;
+        const params = args[2] as OAuth2TokenParams;
+        const profile = args[3] as CitizenIDProfile;
+        const done = args[4] as PassportDoneCallback<unknown, unknown>;
+        if (hasParamsParam) {
+          return (verify as (
+            accessToken: string,
+            refreshToken: string,
+            params: OAuth2TokenParams,
+            profile: CitizenIDProfile,
+            done: PassportDoneCallback<unknown, unknown>
+          ) => void | Promise<void>)(accessToken, refreshToken, params, profile, done);
+        }
+        return (verify as (
+          accessToken: string,
+          refreshToken: string,
+          profile: CitizenIDProfile,
+          done: PassportDoneCallback<unknown, unknown>
+        ) => void | Promise<void>)(accessToken, refreshToken, profile, done);
+      }
+    };
     
-    // Call the parent constructor with properly typed options
-    // Note: verify needs to be cast because passport-oauth2's types are restrictive
-    super(options as OAuth2StrategyOptions, verify as VerifyFunction);
+    // Call the parent constructor with wrapped verify
+    super(options as OAuth2StrategyOptions, wrappedVerify);
     
     this.name = 'citizenid';
-    this._userInfoURL = userInfoURL;
+    this._userInfoURL = options.userInfoURL;
     this._verify = verify;
     
     // Use authorization header for GET requests
@@ -344,6 +523,11 @@ export class Strategy extends OAuth2Strategy {
    *   - `displayName`      the user's full name (name)
    *   - `emails`           the user's email addresses
    *   - `roles`            the user's roles
+   *   - `google`           typed Google profile claims (when google.profile scope is requested)
+   *   - `twitch`           typed Twitch profile claims (when twitch.profile scope is requested)
+   *   - `discord`           typed Discord profile claims (when discord.profile scope is requested)
+   *   - `rsi`              typed RSI profile claims (when rsi.profile scope is requested)
+   *   - `_customClaims`    all custom claims (urn:user:*) for backward compatibility
    *   - `_raw`             the raw user info response
    *   - `_json`            the JSON parsed user info
    *
@@ -370,6 +554,7 @@ export class Strategy extends OAuth2Strategy {
       } catch (err) {
         // If decoding fails, fall back to userinfo endpoint
         // Error is silently ignored to allow fallback
+        // This is expected behavior - ID token may not always be available or valid
       }
     }
     
@@ -409,6 +594,21 @@ export class Strategy extends OAuth2Strategy {
 
   /**
    * Normalize user profile data from Citizen iD.
+   *
+   * This function constructs a normalized profile with the following properties:
+   *   - `provider`         always set to `citizenid`
+   *   - `id`               the user's Citizen iD ID (sub claim)
+   *   - `username`         the user's Citizen iD username (preferred_username)
+   *   - `displayName`      the user's full name (name)
+   *   - `emails`           the user's email addresses
+   *   - `roles`            the user's roles
+   *   - `google`           typed Google profile claims (when google.profile scope is requested)
+   *   - `twitch`           typed Twitch profile claims (when twitch.profile scope is requested)
+   *   - `discord`           typed Discord profile claims (when discord.profile scope is requested)
+   *   - `rsi`              typed RSI profile claims (when rsi.profile scope is requested)
+   *   - `_customClaims`    all custom claims (urn:user:*) for backward compatibility
+   *   - `_raw`             the raw user info response
+   *   - `_json`            the JSON parsed user info
    *
    * @param {CitizenIDUserInfo} json - The user data from ID token or userinfo endpoint
    * @param {String} raw - The raw response
@@ -452,6 +652,7 @@ export class Strategy extends OAuth2Strategy {
     
     // Add custom profile claims (discord, rsi, google, twitch) if available
     // These are prefixed with 'urn:user:' and available when corresponding scopes are requested
+    // Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
     const customClaims: Record<string, unknown> = {};
     const avatarUrls: string[] = [];
     
@@ -463,6 +664,52 @@ export class Strategy extends OAuth2Strategy {
         customClaims[key] = jsonRecord[key];
       }
     });
+    
+    // Extract and populate typed Google profile claims
+    if (json[GoogleClaimKeys.AVATAR_URL] || json[GoogleClaimKeys.EMAIL] || 
+        json[GoogleClaimKeys.NAME] || json[GoogleClaimKeys.ACCOUNT_ID]) {
+      profile.google = {
+        [GoogleClaimKeys.AVATAR_URL]: json[GoogleClaimKeys.AVATAR_URL],
+        [GoogleClaimKeys.EMAIL]: json[GoogleClaimKeys.EMAIL],
+        [GoogleClaimKeys.NAME]: json[GoogleClaimKeys.NAME],
+        [GoogleClaimKeys.ACCOUNT_ID]: json[GoogleClaimKeys.ACCOUNT_ID],
+      };
+    }
+    
+    // Extract and populate typed Twitch profile claims
+    if (json[TwitchClaimKeys.AVATAR_URL] || json[TwitchClaimKeys.EMAIL] || 
+        json[TwitchClaimKeys.USERNAME] || json[TwitchClaimKeys.ACCOUNT_ID]) {
+      profile.twitch = {
+        [TwitchClaimKeys.AVATAR_URL]: json[TwitchClaimKeys.AVATAR_URL],
+        [TwitchClaimKeys.EMAIL]: json[TwitchClaimKeys.EMAIL],
+        [TwitchClaimKeys.USERNAME]: json[TwitchClaimKeys.USERNAME],
+        [TwitchClaimKeys.ACCOUNT_ID]: json[TwitchClaimKeys.ACCOUNT_ID],
+      };
+    }
+    
+    // Extract and populate typed Discord profile claims
+    if (json[DiscordClaimKeys.AVATAR_URL] || json[DiscordClaimKeys.USERNAME] || 
+        json[DiscordClaimKeys.ACCOUNT_ID] || json[DiscordClaimKeys.SCOPES]) {
+      profile.discord = {
+        [DiscordClaimKeys.AVATAR_URL]: json[DiscordClaimKeys.AVATAR_URL],
+        [DiscordClaimKeys.USERNAME]: json[DiscordClaimKeys.USERNAME],
+        [DiscordClaimKeys.ACCOUNT_ID]: json[DiscordClaimKeys.ACCOUNT_ID],
+        [DiscordClaimKeys.SCOPES]: json[DiscordClaimKeys.SCOPES],
+      };
+    }
+    
+    // Extract and populate typed RSI profile claims
+    if (json[RSIClaimKeys.AVATAR_URL] || json[RSIClaimKeys.USERNAME] || 
+        json[RSIClaimKeys.ENLISTED_AT] || json[RSIClaimKeys.CITIZEN_ID] || 
+        json[RSIClaimKeys.SPECTRUM_ID]) {
+      profile.rsi = {
+        [RSIClaimKeys.AVATAR_URL]: json[RSIClaimKeys.AVATAR_URL],
+        [RSIClaimKeys.USERNAME]: json[RSIClaimKeys.USERNAME],
+        [RSIClaimKeys.ENLISTED_AT]: json[RSIClaimKeys.ENLISTED_AT],
+        [RSIClaimKeys.CITIZEN_ID]: json[RSIClaimKeys.CITIZEN_ID],
+        [RSIClaimKeys.SPECTRUM_ID]: json[RSIClaimKeys.SPECTRUM_ID],
+      };
+    }
     
     // Extract avatar URLs using known avatar claim keys
     ALL_AVATAR_CLAIM_KEYS.forEach(avatarKey => {
@@ -477,6 +724,7 @@ export class Strategy extends OAuth2Strategy {
       profile.photos = avatarUrls.map(url => ({ value: url }));
     }
     
+    // Store all custom claims in _customClaims for backward compatibility
     if (Object.keys(customClaims).length > 0) {
       profile._customClaims = customClaims;
     }
@@ -493,7 +741,6 @@ export class Strategy extends OAuth2Strategy {
    * @api protected
    */
   getOAuthAccessToken(code: string, params: Record<string, unknown>, callback: (err: Error | null, accessToken?: string, refreshToken?: string, params?: OAuth2TokenParams) => void): void {
-    const self = this;
     // Accessing protected method from parent class - necessary for functionality
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const originalGetOAuthAccessToken = (OAuth2Strategy.prototype as any).getOAuthAccessToken;
@@ -504,8 +751,8 @@ export class Strategy extends OAuth2Strategy {
       }
       
       // Store the ID token for profile extraction
-      if (params && params.id_token) {
-        self._idToken = params.id_token;
+      if (params?.id_token && typeof params.id_token === 'string') {
+        this._idToken = params.id_token;
       }
       
       callback(null, accessToken, refreshToken, params);
@@ -549,50 +796,11 @@ export class Strategy extends OAuth2Strategy {
     
     return params;
   }
+
 }
 
 // Export constants
-export * from './constants';
-import * as Constants from './constants';
+export * from './constants.js';
 
-/**
- * CommonJS module interface that includes the Strategy class and all constants
- */
-interface CitizenIDModule {
-  Strategy: typeof Strategy;
-  default: typeof Strategy;
-  Scopes: typeof Constants.Scopes;
-  Endpoints: typeof Constants.Endpoints;
-  AvatarClaimKeys: typeof Constants.AvatarClaimKeys;
-  ALL_AVATAR_CLAIM_KEYS: typeof Constants.ALL_AVATAR_CLAIM_KEYS;
-  CUSTOM_CLAIM_PREFIX: typeof Constants.CUSTOM_CLAIM_PREFIX;
-  AVATAR_URL_SUFFIX: typeof Constants.AVATAR_URL_SUFFIX;
-  Roles: typeof Constants.Roles;
-  LegacyRoles: typeof Constants.LegacyRoles;
-  STANDARD_SCOPES: typeof Constants.STANDARD_SCOPES;
-  ALL_SCOPES: typeof Constants.ALL_SCOPES;
-  getEndpoints: typeof Constants.getEndpoints;
-}
-
-// Export as default and named export for CommonJS compatibility
+// Export as default
 export default Strategy;
-
-// Create properly typed CommonJS export
-const moduleExports: CitizenIDModule = {
-  Strategy,
-  default: Strategy,
-  Scopes: Constants.Scopes,
-  Endpoints: Constants.Endpoints,
-  AvatarClaimKeys: Constants.AvatarClaimKeys,
-  ALL_AVATAR_CLAIM_KEYS: Constants.ALL_AVATAR_CLAIM_KEYS,
-  CUSTOM_CLAIM_PREFIX: Constants.CUSTOM_CLAIM_PREFIX,
-  AVATAR_URL_SUFFIX: Constants.AVATAR_URL_SUFFIX,
-  Roles: Constants.Roles,
-  LegacyRoles: Constants.LegacyRoles,
-  STANDARD_SCOPES: Constants.STANDARD_SCOPES,
-  ALL_SCOPES: Constants.ALL_SCOPES,
-  getEndpoints: Constants.getEndpoints,
-};
-
-// Export for CommonJS
-module.exports = moduleExports;

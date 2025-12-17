@@ -64,16 +64,18 @@ To use this strategy, you'll need to register an application with Citizen iD and
 
 ### Optional Options
 
+- **authority**: Base authority (e.g., `https://citizenid.space` or `https://dev.citizenid.space`). If provided, endpoints are derived automatically.
+- **endpoints**: Explicit endpoints object to override derived values (authorizationURL, tokenURL, userInfoURL, revokeURL, discoveryURL).
 - **clientSecret**: Your Citizen iD application's Client Secret (optional for public clients using PKCE)
 - **scope**: Array of permission scopes to request
   - Default: `[Scopes.OPENID, Scopes.PROFILE, Scopes.EMAIL]`
   - Available scopes: Use `Scopes` constants (e.g., `Scopes.OPENID`, `Scopes.PROFILE`, `Scopes.EMAIL`, `Scopes.ROLES`, `Scopes.OFFLINE_ACCESS`, `Scopes.DISCORD_PROFILE`, etc.)
-- **authorizationURL**: Authorization endpoint URL
-  - Default: `Endpoints.PRODUCTION.AUTHORIZATION` (or use `Endpoints.DEVELOPMENT.AUTHORIZATION` for dev)
-- **tokenURL**: Token endpoint URL
-  - Default: `Endpoints.PRODUCTION.TOKEN` (or use `Endpoints.DEVELOPMENT.TOKEN` for dev)
-- **userInfoURL**: UserInfo endpoint URL
-  - Default: `Endpoints.PRODUCTION.USERINFO` (or use `Endpoints.DEVELOPMENT.USERINFO` for dev)
+- **authorizationURL**: Authorization endpoint URL  
+  - Default: `getEndpoints(Endpoints.PRODUCTION.AUTHORITY).AUTHORIZATION` (use `Endpoints.DEVELOPMENT.AUTHORITY` for dev)
+- **tokenURL**: Token endpoint URL  
+  - Default: `getEndpoints(Endpoints.PRODUCTION.AUTHORITY).TOKEN`
+- **userInfoURL**: UserInfo endpoint URL  
+  - Default: `getEndpoints(Endpoints.PRODUCTION.AUTHORITY).USERINFO`
 - **pkce**: Enable PKCE (Proof Key for Code Exchange)
   - Default: `true` (recommended for security)
 - **state**: Enable state parameter for CSRF protection
@@ -250,18 +252,20 @@ passport.use(new CitizenIDStrategy({
   scope: ALL_SCOPES  // All available scopes including custom profile scopes
 }));
 
-// Use endpoint constants for custom configuration
+// Use endpoint helpers for custom configuration
+const authority = process.env.CITIZENID_AUTHORITY || Endpoints.DEVELOPMENT.AUTHORITY; // or PRODUCTION.AUTHORITY
+const endpoints = getEndpoints(authority);
 passport.use(new CitizenIDStrategy({
   // ...
-  authorizationURL: Endpoints.DEVELOPMENT.AUTHORIZATION, // For dev environment
-  tokenURL: Endpoints.DEVELOPMENT.TOKEN,
-  userInfoURL: Endpoints.DEVELOPMENT.USERINFO,
+  authorizationURL: process.env.CITIZENID_AUTHORIZATION_URL || endpoints.AUTHORIZATION,
+  tokenURL: process.env.CITIZENID_TOKEN_URL || endpoints.TOKEN,
+  userInfoURL: process.env.CITIZENID_USERINFO_URL || endpoints.USERINFO,
 }));
 
 // Access additional endpoints (for token revocation, OIDC discovery, etc.)
-const endpoints = getEndpoints(Endpoints.PRODUCTION.AUTHORITY);
-console.log('Revoke endpoint:', endpoints.REVOKE);
-console.log('Discovery endpoint:', endpoints.DISCOVERY);
+const prodEndpoints = getEndpoints(Endpoints.PRODUCTION.AUTHORITY);
+console.log('Revoke endpoint:', prodEndpoints.REVOKE);
+console.log('Discovery endpoint:', prodEndpoints.DISCOVERY);
 
 // Check user roles using role constants
 function verify(accessToken, refreshToken, profile, done) {
@@ -274,7 +278,38 @@ function verify(accessToken, refreshToken, profile, done) {
   // ...
 }
 
-// Access avatar URLs from custom claims
+// Access typed custom claims directly on the profile (recommended)
+// Use claim key constants for type-safe access
+import { GoogleClaimKeys, TwitchClaimKeys, DiscordClaimKeys, RSIClaimKeys } from 'passport-citizenid';
+
+if (profile.google) {
+  const googleAccountId = profile.google[GoogleClaimKeys.ACCOUNT_ID];
+  const googleEmail = profile.google[GoogleClaimKeys.EMAIL];
+  const googleAvatar = profile.google[GoogleClaimKeys.AVATAR_URL];
+}
+
+if (profile.twitch) {
+  const twitchAccountId = profile.twitch[TwitchClaimKeys.ACCOUNT_ID];
+  const twitchUsername = profile.twitch[TwitchClaimKeys.USERNAME];
+  const twitchAvatar = profile.twitch[TwitchClaimKeys.AVATAR_URL];
+}
+
+if (profile.discord) {
+  const discordAccountId = profile.discord[DiscordClaimKeys.ACCOUNT_ID];
+  const discordUsername = profile.discord[DiscordClaimKeys.USERNAME];
+  const discordScopes = profile.discord[DiscordClaimKeys.SCOPES];
+  const discordAvatar = profile.discord[DiscordClaimKeys.AVATAR_URL];
+}
+
+if (profile.rsi) {
+  const rsiCitizenId = profile.rsi[RSIClaimKeys.CITIZEN_ID];
+  const rsiSpectrumId = profile.rsi[RSIClaimKeys.SPECTRUM_ID];
+  const rsiUsername = profile.rsi[RSIClaimKeys.USERNAME];
+  const rsiEnlistedAt = profile.rsi[RSIClaimKeys.ENLISTED_AT];
+  const rsiAvatar = profile.rsi[RSIClaimKeys.AVATAR_URL];
+}
+
+// Access avatar URLs from custom claims (alternative method using constants)
 if (profile._customClaims) {
   const discordAvatar = profile._customClaims[AvatarClaimKeys.DISCORD];
   const rsiAvatar = profile._customClaims[AvatarClaimKeys.RSI];
@@ -413,7 +448,7 @@ For more information about Citizen iD's OAuth2 implementation, see the [Citizen 
 
 You can test the authorization flow using the [OAuth 2.0 Debugger](https://oauthdebugger.com/debug):
 
-1. Set Authorize URI to: `Endpoints.PRODUCTION.AUTHORIZATION` (or use `Endpoints.DEVELOPMENT.AUTHORIZATION` for dev)
+1. Set Authorize URI to: `getEndpoints(Endpoints.PRODUCTION.AUTHORITY).AUTHORIZATION` (or use `Endpoints.DEVELOPMENT.AUTHORITY` for dev)
 2. Use your Client ID
 3. Set your callback URL
 4. Select the scopes you want to test (use `Scopes` constants)

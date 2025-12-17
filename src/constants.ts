@@ -50,21 +50,6 @@ export const ALL_SCOPES: Scope[] = [
 ];
 
 /**
- * Custom profile claim keys for avatar URLs
- */
-export const AvatarClaimKeys = {
-  RSI: 'urn:user:rsi:avatar:url',
-  DISCORD: 'urn:user:discord:avatar:url',
-  TWITCH: 'urn:user:twitch:avatar:url',
-  GOOGLE: 'urn:user:google:avatar:url',
-} as const;
-
-/**
- * Array of all avatar claim keys for easy iteration
- */
-export const ALL_AVATAR_CLAIM_KEYS = Object.values(AvatarClaimKeys);
-
-/**
  * Prefix for custom user claims
  */
 export const CUSTOM_CLAIM_PREFIX = 'urn:user:';
@@ -73,6 +58,66 @@ export const CUSTOM_CLAIM_PREFIX = 'urn:user:';
  * Suffix for avatar URL claims
  */
 export const AVATAR_URL_SUFFIX = ':avatar:url';
+
+/**
+ * Custom profile claim keys for avatar URLs
+ */
+export const AvatarClaimKeys = {
+  RSI: `${CUSTOM_CLAIM_PREFIX}rsi${AVATAR_URL_SUFFIX}`,
+  DISCORD: `${CUSTOM_CLAIM_PREFIX}discord${AVATAR_URL_SUFFIX}`,
+  TWITCH: `${CUSTOM_CLAIM_PREFIX}twitch${AVATAR_URL_SUFFIX}`,
+  GOOGLE: `${CUSTOM_CLAIM_PREFIX}google${AVATAR_URL_SUFFIX}`,
+} as const;
+
+/**
+ * Array of all avatar claim keys for easy iteration
+ */
+export const ALL_AVATAR_CLAIM_KEYS = Object.values(AvatarClaimKeys);
+
+/**
+ * Google profile custom claim keys
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export const GoogleClaimKeys = {
+  AVATAR_URL: `${CUSTOM_CLAIM_PREFIX}google${AVATAR_URL_SUFFIX}`,
+  EMAIL: `${CUSTOM_CLAIM_PREFIX}google:email`,
+  NAME: `${CUSTOM_CLAIM_PREFIX}google:name`,
+  ACCOUNT_ID: `${CUSTOM_CLAIM_PREFIX}google:accountId`,
+} as const;
+
+/**
+ * Twitch profile custom claim keys
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export const TwitchClaimKeys = {
+  AVATAR_URL: `${CUSTOM_CLAIM_PREFIX}twitch${AVATAR_URL_SUFFIX}`,
+  EMAIL: `${CUSTOM_CLAIM_PREFIX}twitch:email`,
+  USERNAME: `${CUSTOM_CLAIM_PREFIX}twitch:username`,
+  ACCOUNT_ID: `${CUSTOM_CLAIM_PREFIX}twitch:accountId`,
+} as const;
+
+/**
+ * Discord profile custom claim keys
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export const DiscordClaimKeys = {
+  AVATAR_URL: `${CUSTOM_CLAIM_PREFIX}discord${AVATAR_URL_SUFFIX}`,
+  USERNAME: `${CUSTOM_CLAIM_PREFIX}discord:username`,
+  ACCOUNT_ID: `${CUSTOM_CLAIM_PREFIX}discord:accountId`,
+  SCOPES: `${CUSTOM_CLAIM_PREFIX}discord:scopes`,
+} as const;
+
+/**
+ * RSI profile custom claim keys
+ * Reference: https://docs.citizenid.space/integrator-guide/oauth2/scopes-claims
+ */
+export const RSIClaimKeys = {
+  AVATAR_URL: `${CUSTOM_CLAIM_PREFIX}rsi${AVATAR_URL_SUFFIX}`,
+  USERNAME: `${CUSTOM_CLAIM_PREFIX}rsi:username`,
+  ENLISTED_AT: `${CUSTOM_CLAIM_PREFIX}rsi:enlistedAt`,
+  CITIZEN_ID: `${CUSTOM_CLAIM_PREFIX}rsi:citizenId`,
+  SPECTRUM_ID: `${CUSTOM_CLAIM_PREFIX}rsi:spectrumId`,
+} as const;
 
 /**
  * System-wide roles that can be assigned to any user
@@ -117,28 +162,31 @@ export const LegacyRoles = {
 export const Endpoints = {
   PRODUCTION: {
     AUTHORITY: 'https://citizenid.space',
-    AUTHORIZATION: 'https://citizenid.space/connect/authorize',
-    TOKEN: 'https://citizenid.space/connect/token',
-    USERINFO: 'https://citizenid.space/connect/userinfo',
-    REVOKE: 'https://citizenid.space/connect/revoke',
-    DISCOVERY: 'https://citizenid.space/.well-known/openid-configuration',
   },
   DEVELOPMENT: {
     AUTHORITY: 'https://dev.citizenid.space',
-    AUTHORIZATION: 'https://dev.citizenid.space/connect/authorize',
-    TOKEN: 'https://dev.citizenid.space/connect/token',
-    USERINFO: 'https://dev.citizenid.space/connect/userinfo',
-    REVOKE: 'https://dev.citizenid.space/connect/revoke',
-    DISCOVERY: 'https://dev.citizenid.space/.well-known/openid-configuration',
   },
+} as const;
+
+// Endpoint path suffixes appended to the selected authority
+export const EndpointPaths = {
+  AUTHORIZATION: '/connect/authorize',
+  TOKEN: '/connect/token',
+  USERINFO: '/connect/userinfo',
+  REVOKE: '/connect/revoke',
+  DISCOVERY: '/.well-known/openid-configuration',
 } as const;
 
 /**
  * Helper function to get endpoints for a given authority
  */
 export function getEndpoints(authority: string = Endpoints.PRODUCTION.AUTHORITY) {
-  if (authority === Endpoints.DEVELOPMENT.AUTHORITY) {
-    return Endpoints.DEVELOPMENT;
-  }
-  return Endpoints.PRODUCTION;
+  return {
+    AUTHORITY: authority,
+    AUTHORIZATION: `${authority}${EndpointPaths.AUTHORIZATION}`,
+    TOKEN: `${authority}${EndpointPaths.TOKEN}`,
+    USERINFO: `${authority}${EndpointPaths.USERINFO}`,
+    REVOKE: `${authority}${EndpointPaths.REVOKE}`,
+    DISCOVERY: `${authority}${EndpointPaths.DISCOVERY}`,
+  };
 }

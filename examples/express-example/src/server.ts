@@ -1,7 +1,21 @@
 import express, { Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import session from 'express-session';
-import { Strategy as CitizenIDStrategy, CitizenIDProfile, Scopes, Endpoints, getEndpoints, PassportDoneCallback, STANDARD_SCOPES, ALL_SCOPES, Roles } from 'passport-citizenid';
+import { 
+  Strategy as CitizenIDStrategy, 
+  CitizenIDProfile, 
+  Scopes, 
+  Endpoints, 
+  getEndpoints, 
+  PassportDoneCallback, 
+  STANDARD_SCOPES, 
+  ALL_SCOPES, 
+  Roles,
+  GoogleClaimKeys,
+  TwitchClaimKeys,
+  DiscordClaimKeys,
+  RSIClaimKeys
+} from 'passport-citizenid';
 import dotenv from 'dotenv';
 
 // Extend Express Request to include CitizenIDProfile
@@ -28,9 +42,15 @@ const app = express();
  * with a user object, which will be set at `req.user` in route handlers after
  * authentication.
  */
-// Determine the authority (dev or prod) and get endpoints
+// Determine the authority (dev or prod) and get endpoints from env (with helper)
 const authority = process.env.CITIZENID_AUTHORITY || Endpoints.PRODUCTION.AUTHORITY;
 const endpoints = getEndpoints(authority);
+console.log('[Example] CitizenID endpoints:', {
+  authority,
+  authorizationURL: process.env.CITIZENID_AUTHORIZATION_URL || endpoints.AUTHORIZATION,
+  tokenURL: process.env.CITIZENID_TOKEN_URL || endpoints.TOKEN,
+  userInfoURL: process.env.CITIZENID_USERINFO_URL || endpoints.USERINFO,
+});
 // Note: Additional endpoints available:
 // - endpoints.REVOKE: Token revocation endpoint
 // - endpoints.DISCOVERY: OpenID Connect discovery endpoint (.well-known/openid-configuration)
@@ -61,9 +81,48 @@ passport.use(new CitizenIDStrategy({
     console.log('Refresh Token:', refreshToken);
     console.log('Profile:', JSON.stringify(profile, null, 2));
     
-    // Custom claims (from scopes like discord.profile, rsi.profile, etc.) are available in profile._customClaims
+    // Typed custom claims are available directly on the profile when corresponding scopes are requested
+    // Use the claim key constants for type-safe access
+    if (profile.google) {
+      console.log('Google Profile:', {
+        accountId: profile.google[GoogleClaimKeys.ACCOUNT_ID],
+        name: profile.google[GoogleClaimKeys.NAME],
+        email: profile.google[GoogleClaimKeys.EMAIL],
+        avatarUrl: profile.google[GoogleClaimKeys.AVATAR_URL],
+      });
+    }
+    
+    if (profile.twitch) {
+      console.log('Twitch Profile:', {
+        accountId: profile.twitch[TwitchClaimKeys.ACCOUNT_ID],
+        username: profile.twitch[TwitchClaimKeys.USERNAME],
+        email: profile.twitch[TwitchClaimKeys.EMAIL],
+        avatarUrl: profile.twitch[TwitchClaimKeys.AVATAR_URL],
+      });
+    }
+    
+    if (profile.discord) {
+      console.log('Discord Profile:', {
+        accountId: profile.discord[DiscordClaimKeys.ACCOUNT_ID],
+        username: profile.discord[DiscordClaimKeys.USERNAME],
+        scopes: profile.discord[DiscordClaimKeys.SCOPES],
+        avatarUrl: profile.discord[DiscordClaimKeys.AVATAR_URL],
+      });
+    }
+    
+    if (profile.rsi) {
+      console.log('RSI Profile:', {
+        citizenId: profile.rsi[RSIClaimKeys.CITIZEN_ID],
+        spectrumId: profile.rsi[RSIClaimKeys.SPECTRUM_ID],
+        username: profile.rsi[RSIClaimKeys.USERNAME],
+        enlistedAt: profile.rsi[RSIClaimKeys.ENLISTED_AT],
+        avatarUrl: profile.rsi[RSIClaimKeys.AVATAR_URL],
+      });
+    }
+    
+    // All custom claims (from scopes like discord.profile, rsi.profile, etc.) are also available in profile._customClaims for backward compatibility
     if (profile._customClaims) {
-      console.log('Custom Claims:', JSON.stringify(profile._customClaims, null, 2));
+      console.log('All Custom Claims:', JSON.stringify(profile._customClaims, null, 2));
     }
     
     // Example: Check user roles using role constants
@@ -170,15 +229,31 @@ app.get('/auth/citizenid', passport.authenticate('citizenid'));
  * and will be exchanged for an access token.
  */
 app.get('/auth/citizenid/callback',
-  passport.authenticate('citizenid', { 
-    failureRedirect: '/login',
-    failureMessage: true
-  }),
-  (req: Request, res: Response) => {
-    // Successful authentication, redirect home
-    res.redirect('/');
-  }
-);
+  (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate('citizenid', { 
+      failureRedirect: '/login',
+      failureMessage: true,
+      session: true,
+      failWithError: true,
+    }, (err: any, user: any, info: any) => {
+      console.log('[Example] CitizenID callback:', { hasErr: !!err, hasUser: !!user, info });
+      if (err) {
+        console.error('[Example] Auth error:', err);
+        return next(err);
+      }
+      if (!user) {
+        console.error('[Example] No user returned from strategy');
+        return res.redirect('/login');
+      }
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error('[Example] login error:', loginErr);
+          return next(loginErr);
+        }
+        return res.redirect('/');
+      });
+    })(req, res, next);
+  });
 
 /**
  * Profile page - requires authentication
@@ -267,9 +342,9 @@ app.listen(PORT, () => {
     console.warn('⚠️  WARNING: CITIZENID_CLIENT_SECRET is not set in .env file');
   }
   
-  const authority = process.env.CITIZENID_AUTHORITY || Endpoints.PRODUCTION.AUTHORITY;
-  console.log(`\n📡 Using Citizen iD Authority: ${authority}`);
-  console.log('   (Set CITIZENID_AUTHORITY in .env to switch between dev/prod)\n');
+const authority = process.env.CITIZENID_AUTHORITY || Endpoints.PRODUCTION.AUTHORITY;
+console.log(`\n📡 Using Citizen iD Authority: ${authority}`);
+console.log('   (Set CITIZENID_AUTHORITY in .env to switch between dev/prod)\n');
   
   console.log('Make sure to configure your .env file with your Citizen iD credentials.\n');
 });
